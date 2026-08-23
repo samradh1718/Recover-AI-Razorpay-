@@ -565,3 +565,12 @@
     border-bottom: 0;
   }
 }
+
+.decision-header-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.decision-status-text {
+  color: #285f9e !important;
+}

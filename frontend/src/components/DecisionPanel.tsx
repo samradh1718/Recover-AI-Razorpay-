@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import {
+  Activity,
   AlertCircle,
   ArrowRight,
   BrainCircuit,
@@ -7,6 +8,7 @@ import {
   Clock3,
   IndianRupee,
   LoaderCircle,
+  RefreshCcw,
   ShieldCheck,
   Sparkles,
   X,
@@ -176,6 +178,27 @@ export function DecisionPanel({
     }
   }
 
+  async function handleRefresh() {
+    setPanelState("loading");
+    setErrorMessage("");
+
+    try {
+      const decisions = await getRecoveryCaseDecisions(
+        recoveryCase.id,
+      );
+      setDecision(decisions[0] ?? null);
+      setPanelState("ready");
+      await onCaseUpdated();
+    } catch (error: unknown) {
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : "Unable to refresh decision history",
+      );
+      setPanelState("error");
+    }
+  }
+
   const reference =
     recoveryCase.provider_payment_id ??
     recoveryCase.provider_subscription_id ??
@@ -202,14 +225,24 @@ export function DecisionPanel({
             <p>{reference}</p>
           </div>
 
-          <button
-            className="decision-close"
-            type="button"
-            aria-label="Close decision panel"
-            onClick={onClose}
-          >
-            <X size={19} />
-          </button>
+          <div className="decision-header-actions">
+            <button
+              className="decision-close"
+              type="button"
+              aria-label="Refresh decision"
+              onClick={() => void handleRefresh()}
+            >
+              <RefreshCcw size={17} />
+            </button>
+            <button
+              className="decision-close"
+              type="button"
+              aria-label="Close decision panel"
+              onClick={onClose}
+            >
+              <X size={19} />
+            </button>
+          </div>
         </header>
 
         <div className="decision-case-strip">
@@ -362,6 +395,46 @@ export function DecisionPanel({
 
               <section className="decision-section">
                 <div className="decision-section-title">
+                  <Activity size={17} />
+                  <h3>Execution and actual outcome</h3>
+                </div>
+
+                <div className="decision-calculation-row">
+                  <span>Decision status</span>
+                  <strong className="decision-status-text">
+                    {readableCode(decision.status)}
+                  </strong>
+                </div>
+                <div className="decision-calculation-row">
+                  <span>Payment attempts</span>
+                  <strong>{recoveryCase.attempt_count}</strong>
+                </div>
+                <div className="decision-calculation-row">
+                  <span>Customer communications</span>
+                  <strong>{recoveryCase.communication_count}</strong>
+                </div>
+                <div className="decision-calculation-row">
+                  <span>Actual intervention cost</span>
+                  <strong>
+                    {money(
+                      recoveryCase.intervention_cost_rupees,
+                      recoveryCase.currency,
+                    )}
+                  </strong>
+                </div>
+                <div className="decision-calculation-row decision-calculation-row--total">
+                  <span>Actually recovered</span>
+                  <strong>
+                    {money(
+                      recoveryCase.recovered_amount_rupees,
+                      recoveryCase.currency,
+                    )}
+                  </strong>
+                </div>
+              </section>
+
+              <section className="decision-section">
+                <div className="decision-section-title">
                   <ShieldCheck size={17} />
                   <h3>Recommendation and policy</h3>
                 </div>
@@ -476,8 +549,10 @@ export function DecisionPanel({
                 <div>
                   <Clock3 size={15} />
                   <span>
-                    {decision.scheduled_for
-                      ? `Scheduled ${dateTime(decision.scheduled_for)}`
+                    {decision.executed_at
+                      ? `Executed ${dateTime(decision.executed_at)}`
+                      : decision.scheduled_for
+                        ? `Scheduled ${dateTime(decision.scheduled_for)}`
                       : `Created ${dateTime(decision.created_at)}`}
                   </span>
                 </div>

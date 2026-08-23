@@ -8,18 +8,24 @@ import {
 } from "./api/cases";
 import { DecisionPanel } from "./components/DecisionPanel";
 import {
+  DecisionHistoryPage,
+  PaymentEventsPage,
+  RecoveryCasesPage,
+  ReportsPage,
+  SettingsPage,
+  type ActivePage,
+} from "./components/WorkspacePages";
+import {
   Activity,
   BarChart3,
   Bell,
   CalendarDays,
   CheckCircle2,
   ChevronDown,
-  Download,
   IndianRupee,
   LayoutDashboard,
   ListChecks,
   MoreHorizontal,
-  Plus,
   RefreshCcw,
   Search,
   Settings,
@@ -210,6 +216,8 @@ const healthLabels: Record<HealthState, string> = {
 };
 
 export default function App() {
+  const [activePage, setActivePage] =
+    useState<ActivePage>("overview");
   const [healthState, setHealthState] =
     useState<HealthState>("checking");
   const [recoveryCases, setRecoveryCases] = useState<
@@ -222,6 +230,15 @@ export default function App() {
   const [selectedCaseId, setSelectedCaseId] = useState<
     string | null
   >(null);
+
+  const pageLabels: Record<ActivePage, string> = {
+    overview: "Overview",
+    cases: "Recovery cases",
+    events: "Payment events",
+    decisions: "Decision history",
+    reports: "Reports",
+    settings: "Settings",
+  };
 
   const loadRecoveryCases = useCallback(
     async (signal?: AbortSignal) => {
@@ -472,14 +489,19 @@ export default function App() {
           <p className="navigation-label">Main</p>
 
           <button
-            className="navigation-item navigation-item--active"
+            className={`navigation-item ${activePage === "overview" ? "navigation-item--active" : ""}`}
             type="button"
+            onClick={() => setActivePage("overview")}
           >
             <LayoutDashboard size={18} />
             Overview
           </button>
 
-          <button className="navigation-item" type="button">
+          <button
+            className={`navigation-item ${activePage === "cases" ? "navigation-item--active" : ""}`}
+            type="button"
+            onClick={() => setActivePage("cases")}
+          >
             <RefreshCcw size={18} />
             Recovery cases
             <span className="navigation-count">
@@ -487,17 +509,29 @@ export default function App() {
             </span>
           </button>
 
-          <button className="navigation-item" type="button">
+          <button
+            className={`navigation-item ${activePage === "events" ? "navigation-item--active" : ""}`}
+            type="button"
+            onClick={() => setActivePage("events")}
+          >
             <Webhook size={18} />
             Payment events
           </button>
 
-          <button className="navigation-item" type="button">
+          <button
+            className={`navigation-item ${activePage === "decisions" ? "navigation-item--active" : ""}`}
+            type="button"
+            onClick={() => setActivePage("decisions")}
+          >
             <ListChecks size={18} />
             Decision history
           </button>
 
-          <button className="navigation-item" type="button">
+          <button
+            className={`navigation-item ${activePage === "reports" ? "navigation-item--active" : ""}`}
+            type="button"
+            onClick={() => setActivePage("reports")}
+          >
             <BarChart3 size={18} />
             Reports
           </button>
@@ -506,7 +540,11 @@ export default function App() {
             Workspace
           </p>
 
-          <button className="navigation-item" type="button">
+          <button
+            className={`navigation-item ${activePage === "settings" ? "navigation-item--active" : ""}`}
+            type="button"
+            onClick={() => setActivePage("settings")}
+          >
             <Settings size={18} />
             Settings
           </button>
@@ -531,7 +569,7 @@ export default function App() {
           <div className="breadcrumb">
             <span>Recoveries</span>
             <span>/</span>
-            <strong>Overview</strong>
+            <strong>{pageLabels[activePage]}</strong>
           </div>
 
           <div className="topbar-actions">
@@ -548,7 +586,7 @@ export default function App() {
               <Search size={17} />
               <input
                 type="search"
-                placeholder="Search payments"
+                placeholder={`Search ${pageLabels[activePage].toLowerCase()}`}
                 aria-label="Search payments"
                 value={searchQuery}
                 onChange={(event) =>
@@ -565,15 +603,20 @@ export default function App() {
             <button
               className="icon-button"
               type="button"
-              aria-label="Notifications"
+              aria-label="Open recovery cases"
+              onClick={() => setActivePage("cases")}
             >
               <Bell size={18} />
-              <span className="notification-dot" />
+              {distributionCounts.review > 0 && (
+                <span className="notification-dot" />
+              )}
             </button>
           </div>
         </header>
 
         <div className="page">
+          {activePage === "overview" && (
+            <>
           <section className="page-heading">
             <div>
               <h1>Overview</h1>
@@ -586,12 +629,15 @@ export default function App() {
               <button className="secondary-button" type="button">
                 <CalendarDays size={16} />
                 Last 7 days
-                <ChevronDown size={14} />
               </button>
 
-              <button className="primary-button" type="button">
-                <Plus size={16} />
-                Create case
+              <button
+                className="primary-button"
+                type="button"
+                onClick={() => void loadRecoveryCases()}
+              >
+                <RefreshCcw size={16} />
+                Refresh data
               </button>
             </div>
           </section>
@@ -702,7 +748,11 @@ export default function App() {
                 ))}
               </div>
 
-              <button className="view-report-button" type="button">
+              <button
+                className="view-report-button"
+                type="button"
+                onClick={() => setActivePage("reports")}
+              >
                 View case report
               </button>
             </article>
@@ -716,14 +766,12 @@ export default function App() {
               </div>
 
               <div className="table-actions">
-                <button className="secondary-button" type="button">
-                  All states
-                  <ChevronDown size={14} />
-                </button>
-
-                <button className="secondary-button" type="button">
-                  <Download size={15} />
-                  Export
+                <button
+                  className="secondary-button"
+                  type="button"
+                  onClick={() => setActivePage("cases")}
+                >
+                  View all cases
                 </button>
               </div>
             </div>
@@ -866,10 +914,45 @@ export default function App() {
                 <button type="button" disabled>
                   Previous
                 </button>
-                <button type="button">Next</button>
+                <button type="button" disabled>
+                  Next
+                </button>
               </div>
             </div>
           </section>
+            </>
+          )}
+
+          {activePage === "cases" && (
+            <RecoveryCasesPage
+              recoveryCases={recoveryCases}
+              searchQuery={searchQuery}
+              onOpenCase={setSelectedCaseId}
+              onRefreshCases={() => void loadRecoveryCases()}
+              caseLoadState={caseLoadState}
+              casesError={casesError}
+            />
+          )}
+
+          {activePage === "events" && (
+            <PaymentEventsPage searchQuery={searchQuery} />
+          )}
+
+          {activePage === "decisions" && (
+            <DecisionHistoryPage
+              recoveryCases={recoveryCases}
+              searchQuery={searchQuery}
+              onOpenCase={setSelectedCaseId}
+            />
+          )}
+
+          {activePage === "reports" && (
+            <ReportsPage recoveryCases={recoveryCases} />
+          )}
+
+          {activePage === "settings" && (
+            <SettingsPage healthState={healthState} />
+          )}
         </div>
       </main>
 

@@ -9,7 +9,6 @@ class Settings(BaseSettings):
         env_file=".env",
         env_file_encoding="utf-8",
         extra="ignore",
-        
     )
 
     app_name: str = "RecoverAI"
@@ -25,6 +24,12 @@ class Settings(BaseSettings):
     razorpay_key_id: str = ""
     razorpay_key_secret: str = ""
     razorpay_webhook_secret: str = ""
+    
+    ai_shadow_mode_enabled: bool = True
+    ollama_base_url: str = "http://127.0.0.1:11434"
+    ollama_model: str = "llama3:latest"
+    ollama_timeout_seconds: float = 120.0
+    ollama_prompt_version: str = "shadow_v1"
 
 
 @lru_cache
