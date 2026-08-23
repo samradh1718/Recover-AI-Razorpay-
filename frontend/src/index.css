@@ -1,0 +1,55 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=TASA+Orbiter:wght@500;600;700&display=swap");
+
+:root {
+  font-family: "Inter", Arial, sans-serif;
+  color: #192839;
+  background: #f6f7f9;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+
+  --sidebar: #0d1530;
+  --sidebar-active: #17244a;
+  --primary: #2b83ea;
+  --primary-hover: #2175d4;
+  --page: #f6f7f9;
+  --surface: #ffffff;
+  --border: #e2e6ed;
+  --text: #192839;
+  --muted: #6f7b8f;
+  --subtle: #929cad;
+  --green: #178653;
+  --orange: #bd701e;
+  --purple: #7256b4;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  min-width: 320px;
+  background: var(--page);
+}
+
+body {
+  min-width: 320px;
+  min-height: 100vh;
+  margin: 0;
+  background: var(--page);
+}
+
+button,
+input {
+  font: inherit;
+}
+
+button {
+  border: 0;
+  cursor: pointer;
+}
+
+button:focus-visible,
+input:focus-visible {
+  outline: 2px solid rgba(43, 131, 234, 0.35);
+  outline-offset: 2px;
+}

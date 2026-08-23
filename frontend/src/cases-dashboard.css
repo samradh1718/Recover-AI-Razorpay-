@@ -1,0 +1,52 @@
+.chart-empty {
+  display: flex;
+  height: 185px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  margin-top: 19px;
+  border: 1px dashed #dce2ea;
+  border-radius: 6px;
+  color: #8a95a6;
+  background: #fafbfd;
+  text-align: center;
+}
+
+.chart-empty svg {
+  margin-bottom: 10px;
+  color: #9ba6b6;
+}
+
+.chart-empty strong {
+  color: #526074;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.chart-empty span {
+  margin-top: 5px;
+  font-size: 10px;
+}
+
+.table-message {
+  height: 110px;
+  color: #778295;
+  font-size: 12px;
+  text-align: center;
+}
+
+.table-message--error {
+  color: #a64242;
+  background: #fffafa;
+}
+
+.distribution-dot--closed,
+.distribution-value--closed {
+  background: #7c8797;
+}
+
+.case-state--closed {
+  border-color: #dce1e8;
+  color: #5e697a;
+  background: #f5f6f8;
+}

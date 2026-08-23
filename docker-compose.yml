@@ -1,0 +1,49 @@
+services:
+  database:
+    image: postgres:16-alpine
+    container_name: recoverai-database
+
+    environment:
+      POSTGRES_DB: recoverai
+      POSTGRES_USER: recoverai
+      POSTGRES_PASSWORD: recoverai
+
+    ports:
+      - "5433:5432"
+
+    volumes:
+      - recoverai-postgres-data:/var/lib/postgresql/data
+
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U recoverai -d recoverai"
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: recoverai-redis
+
+    ports:
+      - "6379:6379"
+
+    volumes:
+      - recoverai-redis-data:/data
+
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+    restart: unless-stopped
+
+volumes:
+  recoverai-postgres-data:
+  recoverai-redis-data:
