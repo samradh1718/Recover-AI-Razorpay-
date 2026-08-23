@@ -9,13 +9,22 @@ from sqlalchemy.orm import Session
 from app.contracts.enums import (
     FailureCategory,
     RecoveryCaseState,
+    RecoveryDecisionStatus,
 )
 from app.models.payment_event import PaymentEvent
 from app.models.recovery_case import RecoveryCase
+from app.models.recovery_decision import RecoveryDecision
 
 
 PAISE_PER_RUPEE = Decimal("100")
 MONEY_PRECISION = Decimal("0.01")
+
+EVALUABLE_STATES = {
+    RecoveryCaseState.DETECTED,
+    RecoveryCaseState.DIAGNOSED,
+    RecoveryCaseState.EVALUATING,
+    RecoveryCaseState.READY,
+}
 
 
 def utc_now() -> datetime:
@@ -115,6 +124,146 @@ def classify_payment_failure(
     return FailureCategory.UNKNOWN
 
 
+def find_recovery_case_for_event(
+    database: Session,
+    event: PaymentEvent,
+) -> RecoveryCase | None:
+    if event.event_type not in {
+        "payment.failed",
+        "payment.captured",
+    }:
+        return None
+
+    try:
+        payment_entity = get_payment_entity(event.payload)
+    except ValueError:
+        return None
+
+    provider_payment_id = payment_entity.get("id")
+
+    if not isinstance(provider_payment_id, str):
+        return None
+
+    return database.execute(
+        select(RecoveryCase).where(
+            RecoveryCase.tenant_id == event.tenant_id,
+            RecoveryCase.provider_payment_id
+            == provider_payment_id,
+        )
+    ).scalar_one_or_none()
+
+
+def captured_event_exists(
+    database: Session,
+    tenant_id: UUID,
+    provider_payment_id: str,
+    current_event_id: UUID,
+) -> bool:
+    captured_event_id = database.execute(
+        select(PaymentEvent.id)
+        .where(
+            PaymentEvent.tenant_id == tenant_id,
+            PaymentEvent.provider_payment_id
+            == provider_payment_id,
+            PaymentEvent.event_type == "payment.captured",
+            PaymentEvent.id != current_event_id,
+        )
+        .limit(1)
+    ).scalar_one_or_none()
+
+    return captured_event_id is not None
+
+
+def process_captured_payment(
+    database: Session,
+    event: PaymentEvent,
+    payment_entity: dict[str, Any],
+) -> dict[str, str]:
+    recovery_case = find_recovery_case_for_event(
+        database=database,
+        event=event,
+    )
+
+    now = utc_now()
+
+    if recovery_case is None:
+        event.processing_status = "ignored"
+        event.processing_error = None
+        event.processed_at = now
+        database.commit()
+
+        return {
+            "status": "ignored",
+            "reason": "no_recovery_case",
+            "event_id": str(event.id),
+        }
+
+    if recovery_case.current_state == RecoveryCaseState.RECOVERED:
+        event.processing_status = "processed"
+        event.processing_error = None
+        event.processed_at = now
+        database.commit()
+
+        return {
+            "status": "already_recovered",
+            "event_id": str(event.id),
+            "case_id": str(recovery_case.id),
+            "case_state": RecoveryCaseState.RECOVERED.value,
+        }
+
+    captured_amount_rupees = convert_paise_to_rupees(
+        payment_entity.get("amount")
+    )
+
+    recovery_case.recovered_amount_rupees = min(
+        captured_amount_rupees,
+        recovery_case.recoverable_amount_rupees,
+    )
+    recovery_case.current_state = RecoveryCaseState.RECOVERED
+    recovery_case.recovered_at = now
+    recovery_case.closed_at = now
+    recovery_case.next_action_at = None
+    recovery_case.state_version += 1
+    recovery_case.updated_at = now
+
+    active_decisions = list(
+        database.execute(
+            select(RecoveryDecision).where(
+                RecoveryDecision.recovery_case_id
+                == recovery_case.id,
+                RecoveryDecision.status.in_(
+                    [
+                        RecoveryDecisionStatus.PROPOSED,
+                        RecoveryDecisionStatus.SCHEDULED,
+                    ]
+                ),
+            )
+        ).scalars()
+    )
+
+    for decision in active_decisions:
+        decision.status = RecoveryDecisionStatus.CANCELLED
+        decision.scheduled_for = None
+        decision.updated_at = now
+
+    event.processing_status = "processed"
+    event.processing_error = None
+    event.processed_at = now
+
+    database.commit()
+
+    return {
+        "status": "recovered",
+        "event_id": str(event.id),
+        "case_id": str(recovery_case.id),
+        "case_state": RecoveryCaseState.RECOVERED.value,
+        "recovered_amount_rupees": str(
+            recovery_case.recovered_amount_rupees
+        ),
+        "cancelled_decisions": str(len(active_decisions)),
+    }
+
+
 def process_payment_event(
     database: Session,
     event_id: UUID,
@@ -135,14 +284,40 @@ def process_payment_event(
             "processed",
             "ignored",
         }:
-            return {
+            result = {
                 "status": event.processing_status,
                 "event_id": str(event.id),
             }
 
+            existing_case = find_recovery_case_for_event(
+                database=database,
+                event=event,
+            )
+
+            if existing_case is not None:
+                result["case_id"] = str(existing_case.id)
+
+                if (
+                    event.event_type == "payment.failed"
+                    and existing_case.current_state
+                    in EVALUABLE_STATES
+                ):
+                    result["should_evaluate"] = "true"
+
+            return result
+
         event.processing_status = "processing"
         event.processing_error = None
         database.flush()
+
+        if event.event_type == "payment.captured":
+            payment_entity = get_payment_entity(event.payload)
+
+            return process_captured_payment(
+                database=database,
+                event=event,
+                payment_entity=payment_entity,
+            )
 
         if event.event_type != "payment.failed":
             event.processing_status = "ignored"
@@ -173,6 +348,23 @@ def process_payment_event(
             payment_entity.get("currency") or "INR"
         ).upper()
 
+        if captured_event_exists(
+            database=database,
+            tenant_id=event.tenant_id,
+            provider_payment_id=provider_payment_id,
+            current_event_id=event.id,
+        ):
+            event.processing_status = "ignored"
+            event.processing_error = None
+            event.processed_at = utc_now()
+            database.commit()
+
+            return {
+                "status": "ignored",
+                "reason": "payment_already_captured",
+                "event_id": str(event.id),
+            }
+
         existing_case = database.execute(
             select(RecoveryCase).where(
                 RecoveryCase.tenant_id == event.tenant_id,
@@ -188,11 +380,16 @@ def process_payment_event(
 
             database.commit()
 
-            return {
+            result = {
                 "status": "already_exists",
                 "event_id": str(event.id),
                 "case_id": str(existing_case.id),
             }
+
+            if existing_case.current_state in EVALUABLE_STATES:
+                result["should_evaluate"] = "true"
+
+            return result
 
         failure_category = classify_payment_failure(
             payment_entity
@@ -235,6 +432,7 @@ def process_payment_event(
             "status": "processed",
             "event_id": str(event.id),
             "case_id": str(recovery_case.id),
+            "should_evaluate": "true",
         }
 
     except Exception as error:

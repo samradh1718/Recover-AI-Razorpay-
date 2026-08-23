@@ -1,6 +1,7 @@
 import hashlib
 import hmac
 import json
+from time import time
 from uuid import uuid4
 
 import httpx
@@ -14,7 +15,7 @@ PAYMENT_ID = "pay_test_auto_003"
 payload = {
     "entity": "event",
     "account_id": "acc_local_test",
-    "event": "payment.failed",
+    "event": "payment.captured",
     "contains": ["payment"],
     "payload": {
         "payment": {
@@ -23,17 +24,19 @@ payload = {
                 "entity": "payment",
                 "amount": 150000,
                 "currency": "INR",
-                "status": "failed",
+                "status": "captured",
+                "captured": True,
                 "customer_id": "cust_auto_003",
-                "error_code": "BAD_REQUEST_ERROR",
-                "error_description": "Payment authentication failed",
-                "error_source": "bank",
-                "error_step": "payment_authentication",
-                "error_reason": "incorrect_otp",
+                "error_code": None,
+                "error_description": None,
+                "error_source": None,
+                "error_step": None,
+                "error_reason": None,
+                "created_at": int(time()),
             }
         }
     },
-    "created_at": 1787400000,
+    "created_at": int(time()),
 }
 
 raw_body = json.dumps(
@@ -47,7 +50,7 @@ signature = hmac.new(
     digestmod=hashlib.sha256,
 ).hexdigest()
 
-event_id = f"evt_local_{uuid4()}"
+event_id = f"evt_local_captured_{uuid4()}"
 
 response = httpx.post(
     (
