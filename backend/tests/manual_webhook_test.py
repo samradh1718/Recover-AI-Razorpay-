@@ -9,7 +9,7 @@ from app.core.config import settings
 
 
 TENANT_ID = "11111111-1111-1111-1111-111111111111"
-PAYMENT_ID = "pay_test_auto_003"
+PAYMENT_ID = "pay_test_auto_004"
 
 payload = {
     "entity": "event",
@@ -24,7 +24,7 @@ payload = {
                 "amount": 150000,
                 "currency": "INR",
                 "status": "failed",
-                "customer_id": "cust_auto_003",
+                "customer_id": "cust_auto_004",
                 "error_code": "BAD_REQUEST_ERROR",
                 "error_description": "Payment authentication failed",
                 "error_source": "bank",

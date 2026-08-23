@@ -1,6 +1,8 @@
 from uuid import UUID
 
 from app.db.session import SessionLocal
+from app.contracts.enums import RecoveryDecisionStatus
+from app.services.action_executor import execute_recovery_action
 from app.services.decision_engine import evaluate_recovery_case
 from app.services.payment_event_processor import (
     process_payment_event,
@@ -43,8 +45,34 @@ def process_payment_event_task(
                     decision.final_action.value
                 )
 
+            if decision.status == RecoveryDecisionStatus.SCHEDULED:
+                execute_recovery_action_task.apply_async(
+                    args=[str(decision.id)],
+                    eta=decision.scheduled_for,
+                )
+                result["action_queued"] = "true"
+
     print(
         f"Payment event processing result: {result}"
+    )
+
+    return result
+
+
+@celery_app.task(
+    name="recoverai.execute_recovery_action",
+)
+def execute_recovery_action_task(
+    decision_id: str,
+) -> dict[str, str | int | bool | None]:
+    with SessionLocal() as database:
+        result = execute_recovery_action(
+            database=database,
+            decision_id=UUID(decision_id),
+        )
+
+    print(
+        f"Recovery action execution result: {result}"
     )
 
     return result
