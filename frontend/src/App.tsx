@@ -1,5 +1,6 @@
 import type { LucideIcon } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
+import { AIInsights } from "./components/AIInsights";
 import { getHealth } from "./api/health";
 import {
   getRecoveryCases,
@@ -13,12 +14,12 @@ import {
   RecoveryCasesPage,
   ReportsPage,
   SettingsPage,
-  type ActivePage,
 } from "./components/WorkspacePages";
 import {
   Activity,
   BarChart3,
   Bell,
+  BrainCircuit,
   CalendarDays,
   CheckCircle2,
   ChevronDown,
@@ -43,6 +44,15 @@ type Metric = {
 };
 
 type CaseLoadState = "loading" | "ready" | "error";
+
+type ActivePage =
+  | "overview"
+  | "cases"
+  | "events"
+  | "decisions"
+  | "ai-insights"
+  | "reports"
+  | "settings";
 
 const TERMINAL_STATES: RecoveryCaseState[] = [
   "RECOVERED",
@@ -236,6 +246,7 @@ export default function App() {
     cases: "Recovery cases",
     events: "Payment events",
     decisions: "Decision history",
+    "ai-insights": "AI Insights",
     reports: "Reports",
     settings: "Settings",
   };
@@ -525,6 +536,18 @@ export default function App() {
           >
             <ListChecks size={18} />
             Decision history
+          </button>
+
+          <button
+            className={`navigation-item ${activePage === "ai-insights" ? "navigation-item--active" : ""}`}
+            type="button"
+            onClick={() => {
+              setActivePage("ai-insights");
+              setSelectedCaseId(null);
+            }}
+          >
+            <BrainCircuit size={18} />
+            AI Insights
           </button>
 
           <button
@@ -944,6 +967,10 @@ export default function App() {
               searchQuery={searchQuery}
               onOpenCase={setSelectedCaseId}
             />
+          )}
+
+          {activePage === "ai-insights" && (
+            <AIInsights />
           )}
 
           {activePage === "reports" && (

@@ -41,6 +41,7 @@ export type ActivePage =
   | "events"
   | "decisions"
   | "reports"
+  | "ai-insights"
   | "settings";
 
 type DataState = "loading" | "ready" | "error";

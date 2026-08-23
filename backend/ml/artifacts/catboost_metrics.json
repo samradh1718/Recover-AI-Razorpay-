@@ -1,0 +1,93 @@
+{
+  "model_name": "catboost_recovery_v1",
+  "dataset": "C:\\Users\\samra\\OneDrive\\Desktop\\razorpay\\backend\\ml\\data\\recovery_training_data.csv",
+  "data_source": "synthetic_v1",
+  "features": [
+    "failure_category",
+    "payment_method",
+    "recovery_action",
+    "customer_segment",
+    "amount_rupees",
+    "attempt_count",
+    "communication_count",
+    "customer_success_rate",
+    "customer_tenure_days",
+    "previous_failures",
+    "previous_recoveries",
+    "hours_since_failure",
+    "days_to_deadline",
+    "hour_of_day",
+    "day_of_week",
+    "is_subscription"
+  ],
+  "categorical_features": [
+    "failure_category",
+    "payment_method",
+    "recovery_action",
+    "customer_segment"
+  ],
+  "split_strategy": "chronological_70_15_15",
+  "best_iteration": 49,
+  "training_rows": 14000,
+  "validation_rows": 3000,
+  "test_rows": 3000,
+  "validation": {
+    "rows": 3000,
+    "positive_rate": 0.569667,
+    "accuracy": 0.692333,
+    "precision": 0.695328,
+    "recall": 0.818607,
+    "f1": 0.751948,
+    "roc_auc": 0.754503,
+    "average_precision": 0.784651,
+    "log_loss": 0.581448,
+    "brier_score": 0.198295,
+    "confusion_matrix": {
+      "true_negative": 678,
+      "false_positive": 613,
+      "false_negative": 310,
+      "true_positive": 1399
+    }
+  },
+  "test": {
+    "rows": 3000,
+    "positive_rate": 0.578,
+    "accuracy": 0.696,
+    "precision": 0.701076,
+    "recall": 0.826413,
+    "f1": 0.758602,
+    "roc_auc": 0.757342,
+    "average_precision": 0.800589,
+    "log_loss": 0.576689,
+    "brier_score": 0.196575,
+    "confusion_matrix": {
+      "true_negative": 655,
+      "false_positive": 611,
+      "false_negative": 301,
+      "true_positive": 1433
+    }
+  },
+  "naive_test_baseline": {
+    "constant_probability": 0.578786,
+    "log_loss": 0.680931,
+    "brier_score": 0.243917
+  },
+  "feature_importances": {
+    "failure_category": 42.983648,
+    "recovery_action": 31.197984,
+    "attempt_count": 12.475211,
+    "customer_success_rate": 6.313453,
+    "payment_method": 1.996753,
+    "days_to_deadline": 1.311517,
+    "hours_since_failure": 0.945297,
+    "previous_recoveries": 0.821621,
+    "day_of_week": 0.39708,
+    "hour_of_day": 0.348135,
+    "communication_count": 0.320113,
+    "amount_rupees": 0.319336,
+    "customer_segment": 0.254484,
+    "customer_tenure_days": 0.158571,
+    "is_subscription": 0.078485,
+    "previous_failures": 0.07831
+  }
+}

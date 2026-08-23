@@ -1,9 +1,19 @@
 from uuid import UUID
 
+from app.contracts.enums import (
+    RecoveryDecisionStatus,
+)
+from app.core.config import settings
 from app.db.session import SessionLocal
-from app.contracts.enums import RecoveryDecisionStatus
-from app.services.action_executor import execute_recovery_action
-from app.services.decision_engine import evaluate_recovery_case
+from app.services.action_executor import (
+    execute_recovery_action,
+)
+from app.services.ai_shadow_runner import (
+    run_ai_shadow_decision,
+)
+from app.services.decision_engine import (
+    evaluate_recovery_case,
+)
 from app.services.payment_event_processor import (
     process_payment_event,
 )
@@ -27,7 +37,11 @@ def process_payment_event_task(
 
         case_id = result.get("case_id")
         should_evaluate = (
-            result.pop("should_evaluate", "false") == "true"
+            result.pop(
+                "should_evaluate",
+                "false",
+            )
+            == "true"
         )
 
         if case_id is not None and should_evaluate:
@@ -37,15 +51,29 @@ def process_payment_event_task(
             )
 
             result["decision_id"] = str(decision.id)
-            result["decision_status"] = decision.status.value
-            result["policy_result"] = decision.policy_result.value
+            result["decision_status"] = (
+                decision.status.value
+            )
+            result["policy_result"] = (
+                decision.policy_result.value
+            )
 
             if decision.final_action is not None:
                 result["final_action"] = (
                     decision.final_action.value
                 )
 
-            if decision.status == RecoveryDecisionStatus.SCHEDULED:
+            if settings.ai_shadow_mode_enabled:
+                generate_ai_shadow_decision_task.apply_async(
+                    args=[str(decision.id)],
+                    queue="ai_shadow",
+                )
+                result["shadow_queued"] = "true"
+
+            if (
+                decision.status
+                == RecoveryDecisionStatus.SCHEDULED
+            ):
                 execute_recovery_action_task.apply_async(
                     args=[str(decision.id)],
                     eta=decision.scheduled_for,
@@ -73,6 +101,30 @@ def execute_recovery_action_task(
 
     print(
         f"Recovery action execution result: {result}"
+    )
+
+    return result
+
+
+@celery_app.task(
+    name="recoverai.generate_ai_shadow_decision",
+    autoretry_for=(Exception,),
+    retry_backoff=True,
+    retry_kwargs={"max_retries": 2},
+)
+def generate_ai_shadow_decision_task(
+    production_decision_id: str,
+) -> dict[str, str | bool | int | None]:
+    with SessionLocal() as database:
+        result = run_ai_shadow_decision(
+            database=database,
+            production_decision_id=UUID(
+                production_decision_id
+            ),
+        )
+
+    print(
+        f"AI shadow decision result: {result}"
     )
 
     return result
