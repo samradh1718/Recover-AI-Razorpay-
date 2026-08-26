@@ -14,6 +14,9 @@ from app.services.ai_shadow_runner import (
 from app.services.decision_engine import (
     evaluate_recovery_case,
 )
+from app.services.ml_shadow_runner import (
+    run_ml_shadow_decision,
+)
 from app.services.payment_event_processor import (
     process_payment_event,
 )
@@ -36,6 +39,7 @@ def process_payment_event_task(
         )
 
         case_id = result.get("case_id")
+
         should_evaluate = (
             result.pop(
                 "should_evaluate",
@@ -63,13 +67,25 @@ def process_payment_event_task(
                     decision.final_action.value
                 )
 
+            # Ollama/LLM shadow evaluation.
             if settings.ai_shadow_mode_enabled:
                 generate_ai_shadow_decision_task.apply_async(
                     args=[str(decision.id)],
                     queue="ai_shadow",
                 )
-                result["shadow_queued"] = "true"
 
+                result["ai_shadow_queued"] = "true"
+
+            # CatBoost ML shadow evaluation.
+            generate_ml_shadow_decision_task.apply_async(
+                args=[str(decision.id)],
+                queue="ml_shadow",
+            )
+
+            result["ml_shadow_queued"] = "true"
+
+            # Only the approved production decision
+            # is allowed to execute a recovery action.
             if (
                 decision.status
                 == RecoveryDecisionStatus.SCHEDULED
@@ -78,6 +94,7 @@ def process_payment_event_task(
                     args=[str(decision.id)],
                     eta=decision.scheduled_for,
                 )
+
                 result["action_queued"] = "true"
 
     print(
@@ -125,6 +142,30 @@ def generate_ai_shadow_decision_task(
 
     print(
         f"AI shadow decision result: {result}"
+    )
+
+    return result
+
+
+@celery_app.task(
+    name="recoverai.generate_ml_shadow_decision",
+    autoretry_for=(Exception,),
+    retry_backoff=True,
+    retry_kwargs={"max_retries": 2},
+)
+def generate_ml_shadow_decision_task(
+    production_decision_id: str,
+) -> dict[str, str | bool | int | None]:
+    with SessionLocal() as database:
+        result = run_ml_shadow_decision(
+            database=database,
+            production_decision_id=UUID(
+                production_decision_id
+            ),
+        )
+
+    print(
+        f"ML shadow decision result: {result}"
     )
 
     return result

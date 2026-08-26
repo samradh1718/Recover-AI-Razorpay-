@@ -10,6 +10,7 @@ from app.models import (
     PaymentEvent,
     RecoveryCase,
     RecoveryDecision,
+    MLShadowDecision,
 )
 
 
