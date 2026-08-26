@@ -17,6 +17,9 @@ from app.api.v1.payment_events import (
 from app.api.v1.webhooks import (
     router as webhooks_router,
 )
+from app.api.v1.audit_timeline import (
+    router as audit_timeline_router,
+)
 
 
 api_router = APIRouter(prefix="/api/v1")
@@ -28,3 +31,4 @@ api_router.include_router(decisions_router)
 api_router.include_router(payment_events_router)
 api_router.include_router(ai_shadow_router)
 api_router.include_router(ml_shadow_router)
+api_router.include_router(audit_timeline_router)

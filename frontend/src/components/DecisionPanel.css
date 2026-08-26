@@ -574,3 +574,269 @@
 .decision-status-text {
   color: #285f9e !important;
 }
+
+.case-timeline-section {
+  overflow: hidden;
+  margin-top: 14px;
+  border: 1px solid #dfe5ee;
+  border-radius: 9px;
+  background: #ffffff;
+}
+
+.case-timeline-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 16px 18px;
+  border-bottom: 1px solid #e7ebf1;
+}
+
+.case-timeline-header > div:first-child > span {
+  display: block;
+  margin-bottom: 4px;
+  color: #778399;
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.case-timeline-header h3 {
+  margin: 0;
+  color: #18233e;
+  font-size: 14px;
+}
+
+.case-timeline-header > div:last-child {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.case-timeline-count {
+  color: #78849a;
+  font-size: 10px;
+}
+
+.case-timeline-header button {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border: 1px solid #dce3ed;
+  border-radius: 6px;
+  color: #526079;
+  background: #ffffff;
+  cursor: pointer;
+}
+
+.case-timeline-header button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.case-timeline-loading,
+.case-timeline-empty {
+  display: flex;
+  min-height: 110px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: #778399;
+  font-size: 11px;
+}
+
+.case-timeline-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  margin: 14px;
+  padding: 12px;
+  border: 1px solid #f1c7c7;
+  border-radius: 7px;
+  color: #9b3333;
+  background: #fff7f7;
+}
+
+.case-timeline-error strong {
+  font-size: 11px;
+}
+
+.case-timeline-error p {
+  margin: 4px 0 0;
+  font-size: 10px;
+}
+
+.case-timeline-list {
+  margin: 0;
+  padding: 6px 18px 16px;
+  list-style: none;
+}
+
+.case-timeline-item {
+  position: relative;
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr);
+  gap: 10px;
+  padding-top: 14px;
+}
+
+.case-timeline-marker {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border: 1px solid #d6e4f8;
+  border-radius: 50%;
+  color: #287df0;
+  background: #eff6ff;
+}
+
+.case-timeline-line {
+  position: absolute;
+  top: 40px;
+  bottom: -16px;
+  left: 13px;
+  width: 1px;
+  background: #dce3ed;
+}
+
+.case-timeline-item--production_decision
+  .case-timeline-marker {
+  border-color: #c9dfd2;
+  color: #147347;
+  background: #eff9f4;
+}
+
+.case-timeline-item--ml_shadow_decision
+  .case-timeline-marker {
+  border-color: #cfe0fa;
+  color: #287df0;
+  background: #edf5ff;
+}
+
+.case-timeline-item--ai_shadow_decision
+  .case-timeline-marker {
+  border-color: #ddd2f5;
+  color: #7052bb;
+  background: #f4f0ff;
+}
+
+.case-timeline-item--action_executed
+  .case-timeline-marker,
+.case-timeline-item--payment_recovered
+  .case-timeline-marker {
+  border-color: #bfe3d0;
+  color: #147347;
+  background: #eff9f4;
+}
+
+.case-timeline-content {
+  min-width: 0;
+  padding-bottom: 2px;
+}
+
+.case-timeline-event-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.case-timeline-event-heading strong {
+  display: block;
+  color: #1b2742;
+  font-size: 11px;
+}
+
+.case-timeline-event-heading > div > span {
+  display: block;
+  margin-top: 3px;
+  color: #8a95a8;
+  font-size: 9px;
+}
+
+.case-timeline-source {
+  padding: 3px 6px;
+  border-radius: 4px;
+  color: #5f6e87;
+  background: #f0f3f7;
+  font-size: 8px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.case-timeline-content > p {
+  margin: 7px 0 0;
+  color: #657187;
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.case-timeline-status-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 7px;
+}
+
+.case-timeline-status-row > span {
+  color: #147347;
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.case-timeline-status-row small {
+  color: #929cad;
+  font-size: 8px;
+}
+
+.case-timeline-details {
+  margin-top: 8px;
+}
+
+.case-timeline-details summary {
+  width: fit-content;
+  color: #2869b2;
+  font-size: 9px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.case-timeline-details > div {
+  margin-top: 8px;
+  padding: 9px 10px;
+  border: 1px solid #e5e9f0;
+  border-radius: 6px;
+  background: #f8fafc;
+}
+
+.case-timeline-details dl {
+  display: grid;
+  grid-template-columns: minmax(110px, 0.85fr) 1fr;
+  gap: 10px;
+  margin: 0;
+  padding: 6px 0;
+  border-bottom: 1px solid #edf0f4;
+}
+
+.case-timeline-details dl:last-child {
+  border-bottom: 0;
+}
+
+.case-timeline-details dt {
+  color: #7d899c;
+  font-size: 8px;
+}
+
+.case-timeline-details dd {
+  overflow-wrap: anywhere;
+  margin: 0;
+  color: #35425a;
+  font-size: 9px;
+  text-align: right;
+}
