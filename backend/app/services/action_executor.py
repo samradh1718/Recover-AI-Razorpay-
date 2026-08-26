@@ -238,7 +238,7 @@ def execute_recovery_action(
             decision.status = (
                 RecoveryDecisionStatus.CANCELLED
             )
-            decision.scheduled_for = None
+
             decision.updated_at = utc_now()
 
             database.commit()
@@ -384,7 +384,7 @@ def execute_recovery_action(
         RecoveryDecisionStatus.EXECUTED
     )
     decision.executed_at = now
-    decision.scheduled_for = None
+
     decision.updated_at = now
 
     database.commit()

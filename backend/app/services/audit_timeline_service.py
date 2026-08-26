@@ -3,7 +3,7 @@ from decimal import Decimal
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from app.models.ai_shadow_decision import (
@@ -83,16 +83,6 @@ def get_case_audit_timeline(
     if recovery_case is None:
         raise ValueError("Recovery case was not found")
 
-    payment_events = database.scalars(
-        select(PaymentEvent)
-        .where(
-            PaymentEvent.tenant_id == tenant_id,
-            PaymentEvent.provider_payment_id
-            == recovery_case.provider_payment_id,
-        )
-        .order_by(PaymentEvent.received_at.asc())
-    ).all()
-
     production_decisions = database.scalars(
         select(RecoveryDecision)
         .where(
@@ -101,6 +91,42 @@ def get_case_audit_timeline(
             == recovery_case.id,
         )
         .order_by(RecoveryDecision.created_at.asc())
+    ).all()
+
+    payment_event_conditions = [
+        PaymentEvent.provider_payment_id
+        == recovery_case.provider_payment_id,
+    ]
+
+    # A Payment Link payment creates a new Razorpay payment ID.
+    # Match those webhooks using the provider Payment Link ID.
+    for decision in production_decisions:
+        if decision.provider_action_id is None:
+            continue
+
+        payment_event_conditions.append(
+            PaymentEvent.payload.contains(
+                {
+                    "payload": {
+                        "payment_link": {
+                            "entity": {
+                                "id": (
+                                    decision.provider_action_id
+                                )
+                            }
+                        }
+                    }
+                }
+            )
+        )
+
+    payment_events = database.scalars(
+        select(PaymentEvent)
+        .where(
+            PaymentEvent.tenant_id == tenant_id,
+            or_(*payment_event_conditions),
+        )
+        .order_by(PaymentEvent.received_at.asc())
     ).all()
 
     ai_shadow_decisions = database.scalars(
@@ -145,8 +171,9 @@ def get_case_audit_timeline(
                     "provider_event_id": (
                         payment_event.provider_event_id
                     ),
-                    "event_type": (
-                        payment_event.event_type
+                    "event_type": payment_event.event_type,
+                    "provider_payment_id": (
+                        payment_event.provider_payment_id
                     ),
                     "processing_status": (
                         payment_event.processing_status
@@ -168,15 +195,14 @@ def get_case_audit_timeline(
                         "processed by the recovery pipeline."
                     ),
                     source="worker",
-                    status=(
-                        payment_event.processing_status
-                    ),
-                    occurred_at=(
-                        payment_event.processed_at
-                    ),
+                    status=payment_event.processing_status,
+                    occurred_at=payment_event.processed_at,
                     details={
                         "payment_event_id": (
                             payment_event.id
+                        ),
+                        "event_type": (
+                            payment_event.event_type
                         ),
                         "processing_error": (
                             payment_event.processing_error
@@ -202,8 +228,7 @@ def get_case_audit_timeline(
                     recovery_case.failure_category
                 ),
                 "recoverable_amount_rupees": (
-                    recovery_case
-                    .recoverable_amount_rupees
+                    recovery_case.recoverable_amount_rupees
                 ),
                 "currency": recovery_case.currency,
                 "recovery_deadline_at": (
@@ -212,10 +237,11 @@ def get_case_audit_timeline(
             },
         )
     )
+
     for decision in production_decisions:
         production_action = (
-                decision.final_action
-                or decision.recommended_action
+            decision.final_action
+            or decision.recommended_action
         )
 
         events.append(
@@ -244,23 +270,19 @@ def get_case_audit_timeline(
                     "policy_result": (
                         decision.policy_result
                     ),
-                    "decision_status": (
-                        decision.status
-                    ),
+                    "decision_status": decision.status,
                     "recovery_probability": (
                         decision.recovery_probability
                     ),
                     "expected_recovery_rupees": (
-                        decision
-                        .expected_recovery_rupees
+                        decision.expected_recovery_rupees
                     ),
                     "estimated_action_cost_rupees": (
                         decision
                         .estimated_action_cost_rupees
                     ),
                     "expected_net_value_rupees": (
-                        decision
-                        .expected_net_value_rupees
+                        decision.expected_net_value_rupees
                     ),
                     "reason_codes": (
                         decision.reason_codes
@@ -318,9 +340,104 @@ def get_case_audit_timeline(
                     details={
                         "decision_id": decision.id,
                         "action": production_action,
-                        "current_decision_status": (
+                        "decision_status": (
                             decision.status
                         ),
+                        "execution_mode": (
+                            decision.execution_mode
+                        ),
+                        "simulated": (
+                            decision.execution_mode
+                            == "simulated"
+                        ),
+                    },
+                )
+            )
+
+        if decision.provider_action_id is not None:
+            provider_created_at = (
+                decision.executed_at
+                or decision.updated_at
+                or decision.created_at
+            )
+
+            events.append(
+                build_event(
+                    event_id=(
+                        f"decision:{decision.id}:"
+                        "provider-action-created"
+                    ),
+                    event_type="provider_action_created",
+                    title="Razorpay Payment Link created",
+                    description=(
+                        "Razorpay Test Mode created a "
+                        "Payment Link for the approved "
+                        "recovery action."
+                    ),
+                    source="razorpay",
+                    status="created",
+                    occurred_at=provider_created_at,
+                    details={
+                        "decision_id": decision.id,
+                        "execution_mode": (
+                            decision.execution_mode
+                        ),
+                        "provider_action_id": (
+                            decision.provider_action_id
+                        ),
+                        "provider_reference_id": (
+                            decision.provider_reference_id
+                        ),
+                        "provider_action_url": (
+                            decision.provider_action_url
+                        ),
+                        "current_provider_status": (
+                            decision.provider_action_status
+                        ),
+                    },
+                )
+            )
+
+        if (
+            decision.provider_action_status == "paid"
+            and recovery_case.recovered_at is not None
+        ):
+            events.append(
+                build_event(
+                    event_id=(
+                        f"decision:{decision.id}:"
+                        "provider-payment-confirmed"
+                    ),
+                    event_type=(
+                        "provider_payment_confirmed"
+                    ),
+                    title="Razorpay payment confirmed",
+                    description=(
+                        "Razorpay confirmed that the "
+                        "recovery Payment Link was paid."
+                    ),
+                    source="razorpay",
+                    status="paid",
+                    occurred_at=recovery_case.recovered_at,
+                    details={
+                        "decision_id": decision.id,
+                        "provider_action_id": (
+                            decision.provider_action_id
+                        ),
+                        "provider_reference_id": (
+                            decision.provider_reference_id
+                        ),
+                        "provider_action_status": (
+                            decision.provider_action_status
+                        ),
+                        "execution_mode": (
+                            decision.execution_mode
+                        ),
+                        "confirmed_amount_rupees": (
+                            recovery_case
+                            .recovered_amount_rupees
+                        ),
+                        "currency": recovery_case.currency,
                     },
                 )
             )
@@ -414,6 +531,18 @@ def get_case_audit_timeline(
         )
 
     if recovery_case.recovered_at is not None:
+        recovered_amount = Decimal(
+            str(recovery_case.recovered_amount_rupees)
+        )
+
+        intervention_cost = Decimal(
+            str(recovery_case.intervention_cost_rupees)
+        )
+
+        net_recovered = (
+            recovered_amount - intervention_cost
+        ).quantize(Decimal("0.01"))
+
         events.append(
             build_event(
                 event_id=(
@@ -422,13 +551,18 @@ def get_case_audit_timeline(
                 event_type="payment_recovered",
                 title="Revenue recovered",
                 description=(
-                    "The payment provider confirmed "
-                    "successful payment capture."
+                    "RecoverAI verified the provider "
+                    "payment and recorded the recovered "
+                    "revenue."
                 ),
-                source="razorpay",
+                source="recovery_engine",
                 status="recovered",
                 occurred_at=recovery_case.recovered_at,
                 details={
+                    "recoverable_amount_rupees": (
+                        recovery_case
+                        .recoverable_amount_rupees
+                    ),
                     "recovered_amount_rupees": (
                         recovery_case
                         .recovered_amount_rupees
@@ -437,6 +571,10 @@ def get_case_audit_timeline(
                         recovery_case
                         .intervention_cost_rupees
                     ),
+                    "net_recovered_rupees": (
+                        net_recovered
+                    ),
+                    "currency": recovery_case.currency,
                 },
             )
         )
@@ -454,11 +592,20 @@ def get_case_audit_timeline(
                     "can be executed for this case."
                 ),
                 source="recovery_engine",
-                status=get_value(
-                    recovery_case.current_state
-                ) or "closed",
+                status=(
+                    get_value(recovery_case.current_state)
+                    or "closed"
+                ),
                 occurred_at=recovery_case.closed_at,
-                details={},
+                details={
+                    "final_state": (
+                        recovery_case.current_state
+                    ),
+                    "recovered_amount_rupees": (
+                        recovery_case
+                        .recovered_amount_rupees
+                    ),
+                },
             )
         )
 
@@ -472,9 +619,10 @@ def get_case_audit_timeline(
         "provider_payment_id": (
             recovery_case.provider_payment_id
         ),
-        "current_state": get_value(
-            recovery_case.current_state
-        ) or "unknown",
+        "current_state": (
+            get_value(recovery_case.current_state)
+            or "unknown"
+        ),
         "total_events": len(events),
         "events": events,
     }

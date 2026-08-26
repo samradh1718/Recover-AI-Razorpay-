@@ -840,3 +840,113 @@
   font-size: 9px;
   text-align: right;
 }
+
+/* Razorpay provider timeline events */
+
+.case-timeline-item--provider_action_created
+  .case-timeline-marker {
+  border-color: #bfd8fb;
+  color: #287df0;
+  background: #edf5ff;
+}
+
+.case-timeline-item--provider_payment_confirmed
+  .case-timeline-marker {
+  border-color: #bfe3d0;
+  color: #147347;
+  background: #eff9f4;
+}
+
+.case-timeline-item--case_closed
+  .case-timeline-marker {
+  border-color: #d8dee8;
+  color: #5f6e87;
+  background: #f4f6f9;
+}
+
+/* Timeline status badges */
+
+.case-timeline-status-row > .case-timeline-status {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 7px;
+  border: 1px solid #dbe3ee;
+  border-radius: 999px;
+  color: #52627a;
+  background: #f4f7fa;
+  font-size: 8px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.case-timeline-status-row
+  > .case-timeline-status--created,
+.case-timeline-status-row
+  > .case-timeline-status--scheduled {
+  border-color: #bfd8fb;
+  color: #2369ba;
+  background: #edf5ff;
+}
+
+.case-timeline-status-row
+  > .case-timeline-status--completed,
+.case-timeline-status-row
+  > .case-timeline-status--processed,
+.case-timeline-status-row
+  > .case-timeline-status--executed,
+.case-timeline-status-row
+  > .case-timeline-status--paid,
+.case-timeline-status-row
+  > .case-timeline-status--recovered {
+  border-color: #bfe3d0;
+  color: #147347;
+  background: #eff9f4;
+}
+
+.case-timeline-status-row
+  > .case-timeline-status--failed,
+.case-timeline-status-row
+  > .case-timeline-status--error,
+.case-timeline-status-row
+  > .case-timeline-status--cancelled {
+  border-color: #f2c5c5;
+  color: #b42318;
+  background: #fff1f1;
+}
+
+/* Razorpay Test Payment Link */
+
+.case-timeline-provider-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 5px;
+  color: #287df0;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.case-timeline-provider-link:hover {
+  color: #145dbf;
+  text-decoration: underline;
+}
+
+.case-timeline-provider-link:focus-visible {
+  border-radius: 3px;
+  outline: 2px solid #9ac3fa;
+  outline-offset: 2px;
+}
+
+/* Highlight verified recovered revenue */
+
+.case-timeline-item--payment_recovered
+  .case-timeline-content {
+  padding: 10px 12px;
+  border: 1px solid #cce8d8;
+  border-radius: 8px;
+  background: linear-gradient(
+    135deg,
+    #f7fcf9 0%,
+    #eff9f4 100%
+  );
+}

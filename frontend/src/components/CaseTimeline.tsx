@@ -1,11 +1,14 @@
 import type { LucideIcon } from "lucide-react";
 import {
   AlertCircle,
+  BadgeCheck,
   BrainCircuit,
   CheckCircle2,
   Clock3,
   Cpu,
+  ExternalLink,
   IndianRupee,
+  Link2,
   LoaderCircle,
   Lock,
   Play,
@@ -41,10 +44,30 @@ const eventIcons: Record<string, LucideIcon> = {
   production_decision: ShieldCheck,
   action_scheduled: Clock3,
   action_executed: Play,
+  provider_action_created: Link2,
+  provider_payment_confirmed: BadgeCheck,
   ml_shadow_decision: Cpu,
   ai_shadow_decision: BrainCircuit,
   payment_recovered: IndianRupee,
   case_closed: Lock,
+};
+
+
+const eventTypeLabels: Record<string, string> = {
+  webhook_received: "Webhook Received",
+  webhook_processed: "Webhook Processed",
+  case_created: "Case Created",
+  production_decision: "Production Decision",
+  action_scheduled: "Action Scheduled",
+  action_executed: "Action Executed",
+  provider_action_created: "Payment Link Created",
+  provider_payment_confirmed: (
+    "Provider Payment Confirmed"
+  ),
+  ml_shadow_decision: "ML Shadow Decision",
+  ai_shadow_decision: "AI Shadow Decision",
+  payment_recovered: "Revenue Recovered",
+  case_closed: "Case Closed",
 };
 
 
@@ -56,6 +79,21 @@ function readable(value: string): string {
         word.charAt(0).toUpperCase() + word.slice(1),
     )
     .join(" ");
+}
+
+
+function eventTypeLabel(eventType: string): string {
+  return (
+    eventTypeLabels[eventType] ??
+    readable(eventType)
+  );
+}
+
+
+function cssToken(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]/g, "-");
 }
 
 
@@ -131,12 +169,61 @@ function formatDetailValue(
     key.includes("status") ||
     key === "failure_category" ||
     key === "policy_result" ||
-    key === "model_source"
+    key === "model_source" ||
+    key === "execution_mode" ||
+    key === "final_state"
   ) {
     return readable(text);
   }
 
   return text;
+}
+
+
+function isSafeProviderUrl(value: unknown): value is string {
+  if (typeof value !== "string") {
+    return false;
+  }
+
+  try {
+    const url = new URL(value);
+
+    return url.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+
+function DetailValue({
+  detailKey,
+  value,
+}: {
+  detailKey: string;
+  value: unknown;
+}) {
+  if (
+    detailKey === "provider_action_url" &&
+    isSafeProviderUrl(value)
+  ) {
+    return (
+      <a
+        className="case-timeline-provider-link"
+        href={value}
+        target="_blank"
+        rel="noreferrer noopener"
+      >
+        Open Razorpay Test Link
+        <ExternalLink size={12} />
+      </a>
+    );
+  }
+
+  return (
+    <>
+      {formatDetailValue(detailKey, value)}
+    </>
+  );
 }
 
 
@@ -154,9 +241,17 @@ function TimelineEvent({
     event.details,
   ).filter(([, value]) => value !== null);
 
+  const statusClass = (
+    `case-timeline-status ` +
+    `case-timeline-status--${cssToken(event.status)}`
+  );
+
   return (
     <li
-      className={`case-timeline-item case-timeline-item--${event.event_type}`}
+      className={
+        `case-timeline-item ` +
+        `case-timeline-item--${event.event_type}`
+      }
     >
       <div className="case-timeline-marker">
         <Icon size={15} />
@@ -184,8 +279,13 @@ function TimelineEvent({
         <p>{event.description}</p>
 
         <div className="case-timeline-status-row">
-          <span>{readable(event.status)}</span>
-          <small>{readable(event.event_type)}</small>
+          <span className={statusClass}>
+            {readable(event.status)}
+          </span>
+
+          <small>
+            {eventTypeLabel(event.event_type)}
+          </small>
         </div>
 
         {detailEntries.length > 0 && (
@@ -196,8 +296,12 @@ function TimelineEvent({
               {detailEntries.map(([key, value]) => (
                 <dl key={key}>
                   <dt>{readable(key)}</dt>
+
                   <dd>
-                    {formatDetailValue(key, value)}
+                    <DetailValue
+                      detailKey={key}
+                      value={value}
+                    />
                   </dd>
                 </dl>
               ))}
@@ -334,7 +438,8 @@ export function CaseTimeline({
               <TimelineEvent
                 event={event}
                 isLast={
-                  index === timeline.events.length - 1
+                  index ===
+                  timeline.events.length - 1
                 }
                 key={event.id}
               />
