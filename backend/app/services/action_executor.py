@@ -12,7 +12,15 @@ from app.contracts.enums import (
     RecoveryCaseState,
     RecoveryDecisionStatus,
 )
-from app.models import RecoveryCase, RecoveryDecision
+from app.core.config import settings
+from app.models import (
+    RecoveryCase,
+    RecoveryDecision,
+)
+from app.services.razorpay_payment_link_service import (
+    RazorpayPaymentLinkError,
+    create_standard_payment_link,
+)
 
 
 MONEY = Decimal("0.01")
@@ -49,7 +57,9 @@ def utc_now() -> datetime:
 
 def _as_utc(value: datetime) -> datetime:
     if value.tzinfo is None:
-        return value.replace(tzinfo=timezone.utc)
+        return value.replace(
+            tzinfo=timezone.utc
+        )
 
     return value.astimezone(timezone.utc)
 
@@ -59,8 +69,11 @@ def _execution_result(
     status: str,
     decision: RecoveryDecision,
     recovery_case: RecoveryCase,
-    simulated: bool,
 ) -> dict[str, Any]:
+    simulated = (
+        decision.execution_mode != "razorpay_test"
+    )
+
     return {
         "status": status,
         "decision_id": str(decision.id),
@@ -71,14 +84,79 @@ def _execution_result(
             else None
         ),
         "decision_status": decision.status.value,
-        "case_state": recovery_case.current_state.value,
-        "attempt_count": recovery_case.attempt_count,
-        "communication_count": recovery_case.communication_count,
+        "case_state": (
+            recovery_case.current_state.value
+        ),
+        "attempt_count": (
+            recovery_case.attempt_count
+        ),
+        "communication_count": (
+            recovery_case.communication_count
+        ),
         "intervention_cost_rupees": str(
-            recovery_case.intervention_cost_rupees
+            recovery_case
+            .intervention_cost_rupees
+        ),
+        "execution_mode": (
+            decision.execution_mode
+        ),
+        "provider_action_id": (
+            decision.provider_action_id
+        ),
+        "provider_reference_id": (
+            decision.provider_reference_id
+        ),
+        "provider_action_url": (
+            decision.provider_action_url
+        ),
+        "provider_action_status": (
+            decision.provider_action_status
         ),
         "simulated": simulated,
     }
+
+
+def _store_provider_result(
+    *,
+    decision: RecoveryDecision,
+    provider_result: dict[str, Any],
+) -> None:
+    decision.execution_mode = "razorpay_test"
+
+    decision.provider_action_id = str(
+        provider_result[
+            "provider_action_id"
+        ]
+    )
+
+    decision.provider_reference_id = str(
+        provider_result[
+            "provider_reference_id"
+        ]
+    )
+
+    decision.provider_action_url = str(
+        provider_result[
+            "provider_action_url"
+        ]
+    )
+
+    decision.provider_action_status = str(
+        provider_result[
+            "provider_action_status"
+        ]
+    )
+
+    provider_response = provider_result.get(
+        "provider_response"
+    )
+
+    if isinstance(provider_response, dict):
+        decision.provider_response = (
+            provider_response
+        )
+    else:
+        decision.provider_response = None
 
 
 def execute_recovery_action(
@@ -86,15 +164,24 @@ def execute_recovery_action(
     decision_id: UUID,
     expected_case_id: UUID | None = None,
 ) -> dict[str, Any]:
-    """Execute one policy-approved recovery action exactly once.
+    """Execute one policy-approved action exactly once.
 
-    Phase 1 deliberately simulates the provider/customer side effect. Database
-    locking, policy validation, idempotency and case transitions are real.
+    The production rules and policy engine retain execution
+    authority.
+
+    When Razorpay actions are disabled, action execution is
+    simulated.
+
+    When Razorpay actions are enabled, eligible customer-facing
+    actions create a Standard Payment Link using Razorpay Test
+    Mode.
     """
 
     decision = database.execute(
         select(RecoveryDecision)
-        .where(RecoveryDecision.id == decision_id)
+        .where(
+            RecoveryDecision.id == decision_id
+        )
         .with_for_update()
     ).scalar_one_or_none()
 
@@ -105,51 +192,70 @@ def execute_recovery_action(
 
     if (
         expected_case_id is not None
-        and decision.recovery_case_id != expected_case_id
+        and decision.recovery_case_id
+        != expected_case_id
     ):
         raise RecoveryDecisionNotFoundError(
-            "Decision does not belong to this recovery case"
+            "Decision does not belong to this "
+            "recovery case"
         )
 
     recovery_case = database.execute(
         select(RecoveryCase)
-        .where(RecoveryCase.id == decision.recovery_case_id)
+        .where(
+            RecoveryCase.id
+            == decision.recovery_case_id
+        )
         .with_for_update()
     ).scalar_one_or_none()
 
     if recovery_case is None:
         raise RecoveryDecisionNotFoundError(
-            "Recovery case for this decision was not found"
+            "Recovery case for this decision "
+            "was not found"
         )
 
-    if decision.status == RecoveryDecisionStatus.EXECUTED:
+    # Idempotency: a completed decision cannot execute again.
+    if (
+        decision.status
+        == RecoveryDecisionStatus.EXECUTED
+    ):
         return _execution_result(
             status="already_executed",
             decision=decision,
             recovery_case=recovery_case,
-            simulated=True,
         )
 
-    if recovery_case.current_state in TERMINAL_STATES:
+    # Never act on a recovered, stopped or expired case.
+    if (
+        recovery_case.current_state
+        in TERMINAL_STATES
+    ):
         if decision.status in {
             RecoveryDecisionStatus.PROPOSED,
             RecoveryDecisionStatus.SCHEDULED,
         }:
-            decision.status = RecoveryDecisionStatus.CANCELLED
+            decision.status = (
+                RecoveryDecisionStatus.CANCELLED
+            )
             decision.scheduled_for = None
             decision.updated_at = utc_now()
+
             database.commit()
 
         return _execution_result(
             status="skipped_terminal_case",
             decision=decision,
             recovery_case=recovery_case,
-            simulated=True,
         )
 
-    if decision.status != RecoveryDecisionStatus.SCHEDULED:
+    if (
+        decision.status
+        != RecoveryDecisionStatus.SCHEDULED
+    ):
         raise RecoveryActionNotExecutableError(
-            "Only a scheduled recovery decision can be executed"
+            "Only a scheduled recovery decision "
+            "can be executed"
         )
 
     if decision.policy_result not in {
@@ -157,66 +263,126 @@ def execute_recovery_action(
         PolicyResult.MODIFIED,
     }:
         raise RecoveryActionNotExecutableError(
-            "The decision does not have policy authorization"
+            "The decision does not have "
+            "policy authorization"
         )
 
     action = decision.final_action
 
     if action is None:
         raise RecoveryActionNotExecutableError(
-            "The decision does not contain a final action"
+            "The decision does not contain "
+            "a final action"
         )
 
+    # Human review requires an operator.
+    # Stop recovery is a state transition, not a payment action.
     if action in {
         RecoveryActionType.HUMAN_REVIEW,
         RecoveryActionType.STOP_RECOVERY,
     }:
         raise RecoveryActionNotExecutableError(
-            f"Action {action.value} cannot be executed automatically"
+            f"Action {action.value} cannot "
+            "be executed automatically"
         )
 
     now = utc_now()
 
     if (
         decision.scheduled_for is not None
-        and _as_utc(decision.scheduled_for) > now
+        and _as_utc(
+            decision.scheduled_for
+        ) > now
     ):
         raise RecoveryActionNotDueError(
-            "The recovery action is scheduled for a future time"
+            "The recovery action is scheduled "
+            "for a future time"
         )
 
-    recovery_case.current_state = RecoveryCaseState.EXECUTING
+    # Real provider execution is permitted only for
+    # customer-facing recovery actions and only when
+    # the explicit environment switch is enabled.
+    should_create_payment_link = (
+        settings.razorpay_actions_enabled
+        and action
+        in CUSTOMER_COMMUNICATION_ACTIONS
+    )
+
+    if should_create_payment_link:
+        try:
+            provider_result = (
+                create_standard_payment_link(
+                    recovery_case=recovery_case,
+                    decision=decision,
+                )
+            )
+        except RazorpayPaymentLinkError:
+            # Release database locks and preserve the
+            # scheduled decision for a controlled retry.
+            database.rollback()
+            raise
+
+        _store_provider_result(
+            decision=decision,
+            provider_result=provider_result,
+        )
+    else:
+        # Retry-payment remains simulated because a real
+        # recurring retry requires a provider token or mandate.
+        decision.execution_mode = "simulated"
+
+    recovery_case.current_state = (
+        RecoveryCaseState.EXECUTING
+    )
     recovery_case.state_version += 1
 
-    if action == RecoveryActionType.RETRY_PAYMENT:
+    if (
+        action
+        == RecoveryActionType.RETRY_PAYMENT
+    ):
         recovery_case.attempt_count += 1
         recovery_case.current_state = (
             RecoveryCaseState.WAITING_FOR_RETRY
         )
+
     elif action in CUSTOMER_COMMUNICATION_ACTIONS:
         recovery_case.communication_count += 1
         recovery_case.current_state = (
             RecoveryCaseState.WAITING_FOR_CUSTOMER
         )
+
     else:
+        database.rollback()
+
         raise RecoveryActionNotExecutableError(
-            f"Unsupported recovery action: {action.value}"
+            f"Unsupported recovery action: "
+            f"{action.value}"
         )
 
     current_cost = Decimal(
-        str(recovery_case.intervention_cost_rupees)
+        str(
+            recovery_case
+            .intervention_cost_rupees
+        )
     )
+
     action_cost = Decimal(
-        str(decision.estimated_action_cost_rupees)
+        str(
+            decision
+            .estimated_action_cost_rupees
+        )
     )
 
     recovery_case.intervention_cost_rupees = (
         current_cost + action_cost
     ).quantize(MONEY)
+
     recovery_case.next_action_at = None
     recovery_case.updated_at = now
 
-    decision.status = RecoveryDecisionStatus.EXECUTED
+    decision.status = (
+        RecoveryDecisionStatus.EXECUTED
+    )
     decision.executed_at = now
     decision.scheduled_for = None
     decision.updated_at = now
@@ -229,5 +395,4 @@ def execute_recovery_action(
         status="executed",
         decision=decision,
         recovery_case=recovery_case,
-        simulated=True,
     )
