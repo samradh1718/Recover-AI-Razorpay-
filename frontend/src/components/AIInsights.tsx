@@ -1,16 +1,18 @@
 import type { LucideIcon } from "lucide-react";
 import {
-  AlertTriangle,
   BrainCircuit,
   CheckCircle2,
   Clock3,
+  Cpu,
   RefreshCcw,
+  Scale,
   ShieldCheck,
   XCircle,
 } from "lucide-react";
 import {
   useCallback,
   useEffect,
+  useMemo,
   useState,
 } from "react";
 
@@ -20,6 +22,12 @@ import {
   type AIShadowDecision,
   type AIShadowSummary,
 } from "../api/aiShadow";
+import {
+  getMLShadowDecisions,
+  getMLShadowSummary,
+  type MLShadowDecision,
+  type MLShadowSummary,
+} from "../api/mlShadow";
 
 import "./AIInsights.css";
 
@@ -48,13 +56,12 @@ function formatAction(value: string | null): string {
 }
 
 
-function formatFailure(value: string | null): string {
-  return formatAction(value);
-}
-
-
 function formatLatency(value: number | null): string {
   if (value === null) return "—";
+
+  if (value < 1000) {
+    return `${value} ms`;
+  }
 
   return `${(value / 1000).toFixed(2)} sec`;
 }
@@ -65,7 +72,26 @@ function formatProbability(
 ): string {
   if (value === null) return "—";
 
-  return `${(Number(value) * 100).toFixed(0)}%`;
+  const probability = Number(value);
+
+  if (!Number.isFinite(probability)) return "—";
+
+  return `${(probability * 100).toFixed(1)}%`;
+}
+
+
+function formatCurrency(value: string | null): string {
+  if (value === null) return "—";
+
+  const amount = Number(value);
+
+  if (!Number.isFinite(amount)) return "—";
+
+  return new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
+    minimumFractionDigits: 2,
+  }).format(amount);
 }
 
 
@@ -77,12 +103,63 @@ function formatDate(value: string): string {
 }
 
 
+function getAlignment(
+  mlDecision: MLShadowDecision,
+  aiDecision?: AIShadowDecision,
+): {
+  label: string;
+  tone: "yes" | "no" | "partial";
+} {
+  if (
+    mlDecision.agrees_with_production === true &&
+    aiDecision?.agrees_with_production === true
+  ) {
+    return {
+      label: "All aligned",
+      tone: "yes",
+    };
+  }
+
+  if (
+    mlDecision.agrees_with_production === false ||
+    aiDecision?.agrees_with_production === false
+  ) {
+    return {
+      label: "Review divergence",
+      tone: "no",
+    };
+  }
+
+  if (
+    mlDecision.agrees_with_production === true &&
+    !aiDecision
+  ) {
+    return {
+      label: "ML aligned",
+      tone: "partial",
+    };
+  }
+
+  return {
+    label: "Pending",
+    tone: "partial",
+  };
+}
+
+
 export function AIInsights() {
-  const [summary, setSummary] =
+  const [aiSummary, setAISummary] =
     useState<AIShadowSummary | null>(null);
 
-  const [decisions, setDecisions] = useState<
+  const [aiDecisions, setAIDecisions] = useState<
     AIShadowDecision[]
+  >([]);
+
+  const [mlSummary, setMLSummary] =
+    useState<MLShadowSummary | null>(null);
+
+  const [mlDecisions, setMLDecisions] = useState<
+    MLShadowDecision[]
   >([]);
 
   const [loadState, setLoadState] =
@@ -98,14 +175,22 @@ export function AIInsights() {
       setErrorMessage("");
 
       try {
-        const [summaryResult, decisionResults] =
-          await Promise.all([
-            getAIShadowSummary(signal),
-            getAIShadowDecisions(signal),
-          ]);
+        const [
+          aiSummaryResult,
+          aiDecisionResults,
+          mlSummaryResult,
+          mlDecisionResults,
+        ] = await Promise.all([
+          getAIShadowSummary(signal),
+          getAIShadowDecisions(signal),
+          getMLShadowSummary(signal),
+          getMLShadowDecisions(signal),
+        ]);
 
-        setSummary(summaryResult);
-        setDecisions(decisionResults);
+        setAISummary(aiSummaryResult);
+        setAIDecisions(aiDecisionResults);
+        setMLSummary(mlSummaryResult);
+        setMLDecisions(mlDecisionResults);
         setLoadState("ready");
       } catch (error: unknown) {
         if (
@@ -118,7 +203,7 @@ export function AIInsights() {
         setErrorMessage(
           error instanceof Error
             ? error.message
-            : "Unable to load AI insights",
+            : "Unable to load decision intelligence",
         );
 
         setLoadState("error");
@@ -139,52 +224,72 @@ export function AIInsights() {
   }, [loadInsights]);
 
 
+  const comparisonRows = useMemo(() => {
+    const aiByProductionDecision = new Map(
+      aiDecisions.map((decision) => [
+        decision.production_decision_id,
+        decision,
+      ]),
+    );
+
+    return mlDecisions.map((mlDecision) => ({
+      mlDecision,
+      aiDecision: aiByProductionDecision.get(
+        mlDecision.production_decision_id,
+      ),
+    }));
+  }, [aiDecisions, mlDecisions]);
+
+
+  const latestMLDecision = mlDecisions[0] ?? null;
+
+
   const metrics: InsightMetric[] = [
     {
-      label: "AI evaluations",
+      label: "ML evaluations",
       value:
         loadState === "loading"
           ? "—"
-          : String(summary?.total_evaluations ?? 0),
-      description: "Shadow recommendations generated",
-      icon: BrainCircuit,
+          : String(mlSummary?.total_evaluations ?? 0),
+      description: "CatBoost shadow decisions generated",
+      icon: Cpu,
       tone: "blue",
     },
     {
-      label: "Agreement rate",
+      label: "ML agreement",
       value:
         loadState === "loading"
           ? "—"
           : `${(
-              summary?.agreement_rate_percent ?? 0
+              mlSummary?.agreement_rate_percent ?? 0
             ).toFixed(1)}%`,
-      description: "AI agreement with production policy",
+      description: "Agreement with bounded rules engine",
       icon: CheckCircle2,
       tone: "green",
     },
     {
-      label: "Average latency",
+      label: "Average probability",
+      value:
+        loadState === "loading"
+          ? "—"
+          : formatProbability(
+              mlSummary
+                ?.average_calibrated_probability ?? null,
+            ),
+      description: "Calibrated recovery probability",
+      icon: Scale,
+      tone: "purple",
+    },
+    {
+      label: "ML latency",
       value:
         loadState === "loading"
           ? "—"
           : formatLatency(
-              summary?.average_latency_ms ?? null,
+              mlSummary?.average_latency_ms ?? null,
             ),
-      description: "Average Ollama response time",
+      description: "Average CatBoost ranking time",
       icon: Clock3,
-      tone: "purple",
-    },
-    {
-      label: "Failed evaluations",
-      value:
-        loadState === "loading"
-          ? "—"
-          : String(
-              (summary?.failed_count ?? 0) +
-                (summary?.invalid_count ?? 0),
-            ),
-      description: "Failed or invalid AI responses",
-      icon: AlertTriangle,
       tone: "orange",
     },
   ];
@@ -196,14 +301,14 @@ export function AIInsights() {
         <div>
           <div className="ai-heading-label">
             <BrainCircuit size={16} />
-            Safe AI evaluation
+            Decision intelligence
           </div>
 
-          <h1>AI Insights</h1>
+          <h1>Recovery Decision Lab</h1>
 
           <p>
-            Compare Ollama recommendations with the bounded
-            production decision engine.
+            Compare bounded production rules, CatBoost action
+            ranking and Ollama recommendations.
           </p>
         </div>
 
@@ -236,10 +341,14 @@ export function AIInsights() {
         <ShieldCheck size={19} />
 
         <div>
-          <strong>AI cannot execute recovery actions</strong>
+          <strong>
+            Production policy remains in control
+          </strong>
+
           <p>
-            Ollama runs independently and only records a
-            recommendation for comparison and auditing.
+            CatBoost and Ollama evaluate the same case in
+            shadow mode. They cannot execute financial or
+            customer-facing actions.
           </p>
         </div>
       </div>
@@ -249,7 +358,9 @@ export function AIInsights() {
           <XCircle size={19} />
 
           <div>
-            <strong>Unable to load AI insights</strong>
+            <strong>
+              Unable to load decision intelligence
+            </strong>
             <p>{errorMessage}</p>
           </div>
 
@@ -285,163 +396,362 @@ export function AIInsights() {
         })}
       </section>
 
+      <section className="ai-model-grid">
+        <article className="ai-model-card ai-model-card--rules">
+          <div className="ai-model-card-heading">
+            <div>
+              <ShieldCheck size={19} />
+              <strong>Rules engine</strong>
+            </div>
+
+            <span>Production</span>
+          </div>
+
+          <p>
+            Applies eligibility, policy limits, stopping rules
+            and execution boundaries.
+          </p>
+
+          <div className="ai-model-footer">
+            <strong>Execution authority</strong>
+            <span>Deterministic and auditable</span>
+          </div>
+        </article>
+
+        <article className="ai-model-card ai-model-card--ml">
+          <div className="ai-model-card-heading">
+            <div>
+              <Cpu size={19} />
+              <strong>CatBoost</strong>
+            </div>
+
+            <span>Shadow</span>
+          </div>
+
+          <p>
+            Scores allowed actions and ranks them using
+            calibrated expected net value.
+          </p>
+
+          <div className="ai-model-footer">
+            <strong>
+              {mlSummary?.completed_count ?? 0} evaluations
+            </strong>
+
+            <span>
+              {formatLatency(
+                mlSummary?.average_latency_ms ?? null,
+              )}{" "}
+              average
+            </span>
+          </div>
+        </article>
+
+        <article className="ai-model-card ai-model-card--ollama">
+          <div className="ai-model-card-heading">
+            <div>
+              <BrainCircuit size={19} />
+              <strong>Ollama · Llama 3</strong>
+            </div>
+
+            <span>Shadow</span>
+          </div>
+
+          <p>
+            Produces a separate recommendation, explanation
+            and auditable reason codes.
+          </p>
+
+          <div className="ai-model-footer">
+            <strong>
+              {aiSummary?.completed_count ?? 0} evaluations
+            </strong>
+
+            <span>
+              {(aiSummary?.agreement_rate_percent ?? 0)
+                .toFixed(1)}
+              % rules agreement
+            </span>
+          </div>
+        </article>
+      </section>
+
       <section className="ai-decision-panel">
         <div className="ai-panel-header">
           <div>
-            <h2>Shadow decision history</h2>
+            <h2>Decision comparison</h2>
+
             <p>
-              Production and AI recommendations for the same
-              recovery cases
+              Three decision layers evaluated against the same
+              recovery case
             </p>
           </div>
 
           <span>
-            {decisions.length} evaluation
-            {decisions.length === 1 ? "" : "s"}
+            {comparisonRows.length} comparison
+            {comparisonRows.length === 1 ? "" : "s"}
           </span>
         </div>
 
         <div className="ai-table-wrapper">
-          <table className="ai-table">
+          <table className="ai-table ai-comparison-table">
             <thead>
               <tr>
                 <th>Payment</th>
                 <th>Failure</th>
-                <th>Production action</th>
-                <th>AI recommendation</th>
-                <th>Agreement</th>
-                <th>Probability</th>
-                <th>Latency</th>
+                <th>Rules action</th>
+                <th>CatBoost</th>
+                <th>Ollama</th>
+                <th>Result</th>
               </tr>
             </thead>
 
             <tbody>
               {loadState === "loading" && (
                 <tr>
-                  <td colSpan={7} className="ai-table-message">
-                    Loading AI evaluations...
+                  <td
+                    colSpan={6}
+                    className="ai-table-message"
+                  >
+                    Loading decision comparisons...
                   </td>
                 </tr>
               )}
 
               {loadState === "ready" &&
-                decisions.length === 0 && (
+                comparisonRows.length === 0 && (
                   <tr>
                     <td
-                      colSpan={7}
+                      colSpan={6}
                       className="ai-table-message"
                     >
-                      No AI shadow evaluations are available.
+                      No ML shadow evaluations are available.
                     </td>
                   </tr>
                 )}
 
               {loadState === "ready" &&
-                decisions.map((decision) => (
-                  <tr key={decision.id}>
-                    <td>
-                      <strong className="ai-payment-id">
-                        {decision.provider_payment_id ??
-                          "Not available"}
-                      </strong>
+                comparisonRows.map(
+                  ({ mlDecision, aiDecision }) => {
+                    const alignment = getAlignment(
+                      mlDecision,
+                      aiDecision,
+                    );
 
-                      <span className="ai-row-date">
-                        {formatDate(decision.created_at)}
-                      </span>
-                    </td>
+                    return (
+                      <tr key={mlDecision.id}>
+                        <td>
+                          <strong className="ai-payment-id">
+                            {mlDecision
+                              .provider_payment_id ??
+                              "Not available"}
+                          </strong>
 
-                    <td>
-                      {formatFailure(
-                        decision.failure_category,
-                      )}
-                    </td>
+                          <span className="ai-row-date">
+                            {formatDate(
+                              mlDecision.created_at,
+                            )}
+                          </span>
+                        </td>
 
-                    <td>
-                      {formatAction(
-                        decision.production_action,
-                      )}
-                    </td>
+                        <td>
+                          {formatAction(
+                            mlDecision.failure_category,
+                          )}
+                        </td>
 
-                    <td>
-                      <strong>
-                        {formatAction(
-                          decision.ai_recommended_action,
-                        )}
-                      </strong>
+                        <td>
+                          <strong>
+                            {formatAction(
+                              mlDecision
+                                .production_action,
+                            )}
+                          </strong>
 
-                      <span className="ai-model-name">
-                        {decision.model_name}
-                      </span>
-                    </td>
+                          <span className="ai-table-model-detail">
+                            Bounded policy
+                          </span>
+                        </td>
 
-                    <td>
-                      {decision.agrees_with_production ===
-                      true ? (
-                        <span className="ai-agreement ai-agreement--yes">
-                          <CheckCircle2 size={14} />
-                          Agreed
-                        </span>
-                      ) : decision.agrees_with_production ===
-                        false ? (
-                        <span className="ai-agreement ai-agreement--no">
-                          <XCircle size={14} />
-                          Disagreed
-                        </span>
-                      ) : (
-                        <span className="ai-agreement">
-                          Pending
-                        </span>
-                      )}
-                    </td>
+                        <td>
+                          <strong>
+                            {formatAction(
+                              mlDecision
+                                .ml_selected_action,
+                            )}
+                          </strong>
 
-                    <td>
-                      {formatProbability(
-                        decision.recovery_probability,
-                      )}
-                    </td>
+                          <span className="ai-table-model-detail">
+                            {formatProbability(
+                              mlDecision
+                                .calibrated_probability,
+                            )}
+                            {" · "}
+                            {formatCurrency(
+                              mlDecision
+                                .expected_net_value_rupees,
+                            )}{" "}
+                            net
+                          </span>
+                        </td>
 
-                    <td>
-                      {formatLatency(decision.latency_ms)}
-                    </td>
-                  </tr>
-                ))}
+                        <td>
+                          <strong>
+                            {formatAction(
+                              aiDecision
+                                ?.ai_recommended_action ??
+                                null,
+                            )}
+                          </strong>
+
+                          <span className="ai-table-model-detail">
+                            {aiDecision
+                              ? `${formatProbability(
+                                  aiDecision
+                                    .recovery_probability,
+                                )} · ${formatLatency(
+                                  aiDecision.latency_ms,
+                                )}`
+                              : "No matching evaluation"}
+                          </span>
+                        </td>
+
+                        <td>
+                          <span
+                            className={`ai-alignment ai-alignment--${alignment.tone}`}
+                          >
+                            {alignment.tone === "yes" ? (
+                              <CheckCircle2 size={14} />
+                            ) : alignment.tone === "no" ? (
+                              <XCircle size={14} />
+                            ) : (
+                              <Clock3 size={14} />
+                            )}
+
+                            {alignment.label}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  },
+                )}
             </tbody>
           </table>
         </div>
-
-        {loadState === "ready" &&
-          decisions.length > 0 && (
-            <div className="ai-explanations">
-              {decisions.map((decision) => (
-                <article
-                  className="ai-explanation-card"
-                  key={`${decision.id}-explanation`}
-                >
-                  <div className="ai-explanation-top">
-                    <strong>
-                      {decision.provider_payment_id}
-                    </strong>
-
-                    <span>{decision.prompt_version}</span>
-                  </div>
-
-                  <p>
-                    {decision.explanation ??
-                      "No AI explanation was provided."}
-                  </p>
-
-                  <div className="ai-reason-codes">
-                    {decision.reason_codes.map((code) => (
-                      <span key={code}>
-                        {formatAction(code)}
-                      </span>
-                    ))}
-                  </div>
-                </article>
-              ))}
-            </div>
-          )}
       </section>
+
+      {latestMLDecision &&
+        latestMLDecision.alternatives.length > 0 && (
+          <section className="ml-ranking-panel">
+            <div className="ai-panel-header">
+              <div>
+                <h2>Latest CatBoost action ranking</h2>
+
+                <p>
+                  {latestMLDecision.provider_payment_id} ·{" "}
+                  {formatAction(
+                    latestMLDecision.failure_category,
+                  )}
+                </p>
+              </div>
+
+              <span>
+                {
+                  latestMLDecision.alternatives.length
+                }{" "}
+                allowed actions
+              </span>
+            </div>
+
+            <div className="ml-ranking-list">
+              {latestMLDecision.alternatives.map(
+                (alternative) => {
+                  const probability = Math.max(
+                    0,
+                    Math.min(
+                      100,
+                      Number(
+                        alternative
+                          .calibrated_probability,
+                      ) * 100,
+                    ),
+                  );
+
+                  return (
+                    <article
+                      className={`ml-ranking-row ${
+                        alternative.rank === 1
+                          ? "ml-ranking-row--selected"
+                          : ""
+                      }`}
+                      key={alternative.action}
+                    >
+                      <div className="ml-rank-number">
+                        {alternative.rank}
+                      </div>
+
+                      <div className="ml-rank-action">
+                        <strong>
+                          {formatAction(
+                            alternative.action,
+                          )}
+                        </strong>
+
+                        <span>
+                          {alternative.rank === 1
+                            ? "Selected by expected net value"
+                            : "Policy-allowed alternative"}
+                        </span>
+                      </div>
+
+                      <div className="ml-rank-probability">
+                        <div>
+                          <span>
+                            Recovery probability
+                          </span>
+
+                          <strong>
+                            {formatProbability(
+                              alternative
+                                .calibrated_probability,
+                            )}
+                          </strong>
+                        </div>
+
+                        <div className="ml-probability-track">
+                          <span
+                            style={{
+                              width: `${probability}%`,
+                            }}
+                          />
+                        </div>
+                      </div>
+
+                      <div className="ml-rank-value">
+                        <span>Expected net value</span>
+
+                        <strong>
+                          {formatCurrency(
+                            alternative
+                              .expected_net_value_rupees,
+                          )}
+                        </strong>
+
+                        <small>
+                          Cost{" "}
+                          {formatCurrency(
+                            alternative
+                              .estimated_action_cost_rupees,
+                          )}
+                        </small>
+                      </div>
+                    </article>
+                  );
+                },
+              )}
+            </div>
+          </section>
+        )}
     </div>
   );
 }

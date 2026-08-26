@@ -364,3 +364,247 @@
     grid-template-columns: 1fr;
   }
 }
+
+.ai-model-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.ai-model-card {
+  display: flex;
+  min-height: 178px;
+  padding: 18px;
+  border: 1px solid #dce2ec;
+  border-top-width: 3px;
+  border-radius: 9px;
+  background: #ffffff;
+  flex-direction: column;
+}
+
+.ai-model-card--rules {
+  border-top-color: #188b51;
+}
+
+.ai-model-card--ml {
+  border-top-color: #2f80ed;
+}
+
+.ai-model-card--ollama {
+  border-top-color: #7052bb;
+}
+
+.ai-model-card-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.ai-model-card-heading > div {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: #172441;
+}
+
+.ai-model-card-heading strong {
+  font-size: 14px;
+}
+
+.ai-model-card-heading > span {
+  padding: 4px 7px;
+  border-radius: 4px;
+  background: #f0f3f8;
+  color: #61708e;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.ai-model-card > p {
+  margin: 18px 0;
+  color: #687795;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.ai-model-footer {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: auto;
+}
+
+.ai-model-footer strong {
+  color: #172441;
+  font-size: 12px;
+}
+
+.ai-model-footer span {
+  color: #8793a9;
+  font-size: 10px;
+  text-align: right;
+}
+
+.ai-table-model-detail {
+  display: block;
+  margin-top: 5px;
+  color: #8793a9;
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.ai-alignment {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.ai-alignment--yes {
+  background: #eaf8f0;
+  color: #147a46;
+}
+
+.ai-alignment--no {
+  background: #fff0f0;
+  color: #b24242;
+}
+
+.ai-alignment--partial {
+  background: #fff5e8;
+  color: #a36518;
+}
+
+.ml-ranking-panel {
+  overflow: hidden;
+  border: 1px solid #dce2ec;
+  border-radius: 9px;
+  background: #ffffff;
+}
+
+.ml-ranking-list {
+  display: grid;
+}
+
+.ml-ranking-row {
+  display: grid;
+  grid-template-columns:
+    38px minmax(190px, 1.1fr)
+    minmax(220px, 1.5fr) minmax(150px, 0.8fr);
+  align-items: center;
+  gap: 18px;
+  padding: 16px 20px;
+  border-top: 1px solid #e8ecf2;
+}
+
+.ml-ranking-row--selected {
+  background: #f5f9ff;
+}
+
+.ml-rank-number {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border: 1px solid #d7dfeb;
+  border-radius: 50%;
+  background: #ffffff;
+  color: #65738e;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.ml-ranking-row--selected .ml-rank-number {
+  border-color: #2f80ed;
+  background: #2f80ed;
+  color: #ffffff;
+}
+
+.ml-rank-action strong,
+.ml-rank-action span,
+.ml-rank-value span,
+.ml-rank-value strong,
+.ml-rank-value small {
+  display: block;
+}
+
+.ml-rank-action strong {
+  color: #172441;
+  font-size: 12px;
+}
+
+.ml-rank-action span {
+  margin-top: 5px;
+  color: #8793a9;
+  font-size: 10px;
+}
+
+.ml-rank-probability > div:first-child {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  color: #65738e;
+  font-size: 10px;
+}
+
+.ml-rank-probability strong {
+  color: #172441;
+}
+
+.ml-probability-track {
+  overflow: hidden;
+  height: 5px;
+  margin-top: 8px;
+  border-radius: 999px;
+  background: #e9edf4;
+}
+
+.ml-probability-track span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: #2f80ed;
+}
+
+.ml-rank-value {
+  text-align: right;
+}
+
+.ml-rank-value span,
+.ml-rank-value small {
+  color: #8793a9;
+  font-size: 10px;
+}
+
+.ml-rank-value strong {
+  margin: 4px 0;
+  color: #147a46;
+  font-size: 13px;
+}
+
+@media (max-width: 1100px) {
+  .ai-model-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .ml-ranking-row {
+    grid-template-columns: 36px 1fr;
+  }
+
+  .ml-rank-probability,
+  .ml-rank-value {
+    grid-column: 2;
+  }
+
+  .ml-rank-value {
+    text-align: left;
+  }
+}
