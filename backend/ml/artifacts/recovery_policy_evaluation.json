@@ -1,0 +1,141 @@
+{
+  "evaluation_name": "synthetic_counterfactual_policy_v1",
+  "dataset_source": "synthetic_v1",
+  "test_rows": 3000,
+  "split_strategy": "chronological_70_15_15",
+  "calibration_method": "platt",
+  "methodology": {
+    "ground_truth": "synthetic generator expected recovery probability",
+    "selection_objective": "probability * amount_rupees - action_cost_rupees",
+    "noise_control": "same deterministic noise draw for every candidate action within a case",
+    "real_world_claim": false
+  },
+  "policies": {
+    "stop_recovery": {
+      "policy": "stop_recovery",
+      "cases": 3000,
+      "payment_volume_rupees": 9471308.45,
+      "expected_recovered_cases": 459.68,
+      "expected_recovery_rate_percent": 15.3228,
+      "expected_gross_recovery_rupees": 1377102.53,
+      "intervention_cost_rupees": 0.0,
+      "expected_net_recovery_rupees": 1377102.53,
+      "net_recovery_rate_percent": 14.5397,
+      "oracle_agreement_percent": 0.3,
+      "action_distribution": {
+        "retry_payment": 0,
+        "send_payment_link": 0,
+        "request_payment_method_update": 0,
+        "request_customer_authorization": 0,
+        "human_review": 0,
+        "stop_recovery": 3000
+      }
+    },
+    "logged_synthetic": {
+      "policy": "logged_synthetic",
+      "cases": 3000,
+      "payment_volume_rupees": 9471308.45,
+      "expected_recovered_cases": 1740.48,
+      "expected_recovery_rate_percent": 58.016,
+      "expected_gross_recovery_rupees": 5396539.01,
+      "intervention_cost_rupees": 16995.5,
+      "expected_net_recovery_rupees": 5379543.51,
+      "net_recovery_rate_percent": 56.7983,
+      "oracle_agreement_percent": 76.6,
+      "action_distribution": {
+        "retry_payment": 1262,
+        "send_payment_link": 148,
+        "request_payment_method_update": 519,
+        "request_customer_authorization": 638,
+        "human_review": 296,
+        "stop_recovery": 137
+      }
+    },
+    "rules_preferred": {
+      "policy": "rules_preferred",
+      "cases": 3000,
+      "payment_volume_rupees": 9471308.45,
+      "expected_recovered_cases": 1929.23,
+      "expected_recovery_rate_percent": 64.3078,
+      "expected_gross_recovery_rupees": 6003833.79,
+      "intervention_cost_rupees": 14164.5,
+      "expected_net_recovery_rupees": 5989669.29,
+      "net_recovery_rate_percent": 63.2401,
+      "oracle_agreement_percent": 98.6333,
+      "action_distribution": {
+        "retry_payment": 1538,
+        "send_payment_link": 0,
+        "request_payment_method_update": 543,
+        "request_customer_authorization": 681,
+        "human_review": 238,
+        "stop_recovery": 0
+      }
+    },
+    "catboost_calibrated": {
+      "policy": "catboost_calibrated",
+      "cases": 3000,
+      "payment_volume_rupees": 9471308.45,
+      "expected_recovered_cases": 1911.59,
+      "expected_recovery_rate_percent": 63.7197,
+      "expected_gross_recovery_rupees": 5967206.12,
+      "intervention_cost_rupees": 8203.5,
+      "expected_net_recovery_rupees": 5959002.62,
+      "net_recovery_rate_percent": 62.9164,
+      "oracle_agreement_percent": 93.8,
+      "action_distribution": {
+        "retry_payment": 1458,
+        "send_payment_link": 54,
+        "request_payment_method_update": 693,
+        "request_customer_authorization": 681,
+        "human_review": 114,
+        "stop_recovery": 0
+      }
+    },
+    "synthetic_oracle": {
+      "policy": "synthetic_oracle",
+      "cases": 3000,
+      "payment_volume_rupees": 9471308.45,
+      "expected_recovered_cases": 1926.28,
+      "expected_recovery_rate_percent": 64.2093,
+      "expected_gross_recovery_rupees": 6002812.29,
+      "intervention_cost_rupees": 12196.0,
+      "expected_net_recovery_rupees": 5990616.29,
+      "net_recovery_rate_percent": 63.2501,
+      "oracle_agreement_percent": 100.0,
+      "action_distribution": {
+        "retry_payment": 1537,
+        "send_payment_link": 32,
+        "request_payment_method_update": 543,
+        "request_customer_authorization": 681,
+        "human_review": 198,
+        "stop_recovery": 9
+      }
+    }
+  },
+  "comparisons": {
+    "catboost_vs_stop": {
+      "candidate": "catboost_calibrated",
+      "baseline": "stop_recovery",
+      "absolute_net_uplift_rupees": 4581900.09,
+      "relative_net_uplift_percent": 332.7203
+    },
+    "catboost_vs_logged": {
+      "candidate": "catboost_calibrated",
+      "baseline": "logged_synthetic",
+      "absolute_net_uplift_rupees": 579459.11,
+      "relative_net_uplift_percent": 10.7715
+    },
+    "catboost_vs_rules": {
+      "candidate": "catboost_calibrated",
+      "baseline": "rules_preferred",
+      "absolute_net_uplift_rupees": -30666.67,
+      "relative_net_uplift_percent": -0.512
+    },
+    "catboost_vs_oracle": {
+      "candidate": "catboost_calibrated",
+      "baseline": "synthetic_oracle",
+      "absolute_net_uplift_rupees": -31613.67,
+      "relative_net_uplift_percent": -0.5277
+    }
+  }
+}
