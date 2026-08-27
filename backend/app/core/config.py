@@ -1,6 +1,6 @@
 from functools import lru_cache
 from typing import Literal
-
+from uuid import UUID
 from pydantic_settings import (
     BaseSettings,
     SettingsConfigDict,
@@ -27,6 +27,11 @@ class Settings(BaseSettings):
     frontend_origin: str = (
         "http://localhost:5173"
     )
+    backend_api_base_url: str = (
+        "http://127.0.0.1:8000/api/v1"
+    )
+
+    demo_tenant_id: UUID | None = None
 
     database_url: str
     redis_url: str

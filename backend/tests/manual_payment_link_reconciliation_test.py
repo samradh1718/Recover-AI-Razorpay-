@@ -1,3 +1,4 @@
+import argparse
 import json
 
 from sqlalchemy import select
@@ -12,14 +13,34 @@ from app.services.payment_link_reconciliation_service import (
 )
 
 
-PAYMENT_ID = "pay_test_auto_009"
+def parse_arguments() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description=(
+            "Reconcile the latest Razorpay Payment Link "
+            "decision, or a specified payment."
+        )
+    )
+
+    parser.add_argument(
+        "--payment-id",
+        help=(
+            "Optional original provider payment ID. "
+            "The latest eligible decision is used "
+            "when omitted."
+        ),
+    )
+
+    return parser.parse_args()
 
 
 def main() -> None:
+    arguments = parse_arguments()
+
     with SessionLocal() as database:
-        decision_id = database.execute(
+        query = (
             select(
-                RecoveryDecision.id
+                RecoveryDecision.id,
+                RecoveryCase.provider_payment_id,
             )
             .join(
                 RecoveryCase,
@@ -27,8 +48,6 @@ def main() -> None:
                 == RecoveryDecision.recovery_case_id,
             )
             .where(
-                RecoveryCase.provider_payment_id
-                == PAYMENT_ID,
                 RecoveryDecision.provider_action_id
                 .is_not(None),
             )
@@ -36,15 +55,39 @@ def main() -> None:
                 RecoveryDecision.created_at.desc()
             )
             .limit(1)
-        ).scalar_one_or_none()
+        )
+
+        if arguments.payment_id is not None:
+            query = query.where(
+                RecoveryCase.provider_payment_id
+                == arguments.payment_id
+            )
+
+        match = database.execute(
+            query
+        ).one_or_none()
 
         database.rollback()
 
-        if decision_id is None:
+        if match is None:
+            target = (
+                arguments.payment_id
+                or "the latest recovery case"
+            )
+
             raise RuntimeError(
                 "No Razorpay Payment Link decision "
-                f"was found for {PAYMENT_ID}"
+                f"was found for {target}"
             )
+
+        decision_id = match[0]
+        payment_id = match[1]
+
+        print(
+            "Reconciling latest eligible decision"
+        )
+        print("Payment ID:", payment_id)
+        print("Decision ID:", decision_id)
 
         result = reconcile_payment_link(
             database=database,

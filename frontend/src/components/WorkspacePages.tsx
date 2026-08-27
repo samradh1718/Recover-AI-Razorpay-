@@ -1,3 +1,4 @@
+import { API_BASE_URL } from "../api/runtimeConfig";
 import {
   Activity,
   AlertCircle,
@@ -476,15 +477,15 @@ export function ReportsPage({ recoveryCases }: { recoveryCases: RecoveryCaseResp
 }
 
 export function SettingsPage({ healthState }: { healthState: string }) {
-  const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8000/api/v1";
+
   return (
     <>
       <PageHeading title="Settings" description="Runtime connection and recovery safety configuration." />
       <section className="settings-grid">
-        <article className="panel settings-card"><div className="settings-icon"><Server size={19} /></div><div><span>Backend API</span><strong>{apiBaseUrl}</strong><small className={`connection-text connection-text--${healthState}`}>{healthState}</small></div></article>
+        <article className="panel settings-card"><div className="settings-icon"><Server size={19} /></div><div><span>Backend API</span><strong>{API_BASE_URL}</strong><small className={`connection-text connection-text--${healthState}`}>{healthState}</small></div></article>
         <article className="panel settings-card"><div className="settings-icon"><Database size={19} /></div><div><span>Data source</span><strong>PostgreSQL recovery ledger</strong><small>Dashboard values are not mocked</small></div></article>
         <article className="panel settings-card"><div className="settings-icon"><Webhook size={19} /></div><div><span>Event source</span><strong>Razorpay signed webhooks</strong><small>Test mode during development</small></div></article>
-        <article className="panel settings-card"><div className="settings-icon"><BrainCircuit size={19} /></div><div><span>Decision source</span><strong>rules_v1</strong><small>AI shadow mode will be added separately</small></div></article>
+        <article className="panel settings-card"><div className="settings-icon"><BrainCircuit size={19} /></div><div><span>Decision source</span><strong>rules_v1</strong><small>CatBoost and Ollama run in shadow mode</small></div></article>
       </section>
       <section className="panel guardrail-panel">
         <div className="panel-header"><div><h2>Active safety boundaries</h2><p>Implemented backend policy controls</p></div></div>

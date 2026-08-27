@@ -1,3 +1,4 @@
+import { API_BASE_URL } from "./runtimeConfig";
 export type PaymentEventResponse = {
   id: string;
   tenant_id: string;
@@ -11,9 +12,7 @@ export type PaymentEventResponse = {
   processed_at: string | null;
 };
 
-const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL ??
-  "http://127.0.0.1:8000/api/v1";
+
 
 export async function getPaymentEvents(
   signal?: AbortSignal,

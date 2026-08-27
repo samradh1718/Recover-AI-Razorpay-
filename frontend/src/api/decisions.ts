@@ -1,3 +1,4 @@
+import { API_BASE_URL } from "./runtimeConfig";
 export type RecoveryActionType =
   | "retry_payment"
   | "send_payment_link"
@@ -54,9 +55,7 @@ export type RecoveryDecisionResponse = {
   updated_at: string;
 };
 
-const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL ??
-  "http://127.0.0.1:8000/api/v1";
+
 
 async function getErrorMessage(
   response: Response,

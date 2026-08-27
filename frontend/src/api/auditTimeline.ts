@@ -1,3 +1,8 @@
+import {
+  API_BASE_URL,
+  TENANT_ID,
+} from "./runtimeConfig";
+
 export type AuditTimelineEvent = {
   id: string;
   event_type: string;
@@ -18,13 +23,6 @@ export type CaseAuditTimeline = {
   events: AuditTimelineEvent[];
 };
 
-const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL ??
-  "http://127.0.0.1:8000/api/v1";
-
-const TENANT_ID =
-  import.meta.env.VITE_TENANT_ID ??
-  "11111111-1111-1111-1111-111111111111";
 
 export async function getCaseAuditTimeline(
   caseId: string,
