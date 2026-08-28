@@ -1,6 +1,8 @@
+
 from functools import lru_cache
 from typing import Literal
 from uuid import UUID
+
 from pydantic_settings import (
     BaseSettings,
     SettingsConfigDict,
@@ -24,9 +26,8 @@ class Settings(BaseSettings):
 
     app_debug: bool = False
 
-    frontend_origin: str = (
-        "http://localhost:5173"
-    )
+    frontend_origin: str = "http://localhost:5173"
+
     backend_api_base_url: str = (
         "http://127.0.0.1:8000/api/v1"
     )
@@ -42,28 +43,36 @@ class Settings(BaseSettings):
     razorpay_key_secret: str = ""
     razorpay_webhook_secret: str = ""
 
+    # Customer notification remains disabled unless
+    # explicitly enabled.
+    razorpay_customer_notifications_enabled: bool = False
+
+    razorpay_notification_channel: Literal[
+        "email",
+        "sms",
+    ] = "email"
+
+    # Used only by locally generated demo webhooks.
+    # Production webhooks provide actual customer details.
+    demo_customer_email: str = ""
+    demo_customer_contact: str = ""
+
     # Real provider actions remain disabled unless
     # explicitly enabled.
     razorpay_actions_enabled: bool = False
 
     razorpay_api_timeout_seconds: float = 20.0
 
-    razorpay_payment_link_expiry_minutes: int = (
-        1440
-    )
+    razorpay_payment_link_expiry_minutes: int = 1440
 
     # Webhook fallback reconciliation.
     razorpay_reconciliation_enabled: bool = True
 
     # First provider status check after creating a link.
-    razorpay_reconciliation_initial_delay_seconds: int = (
-        30
-    )
+    razorpay_reconciliation_initial_delay_seconds: int = 30
 
     # Delay between provider status checks.
-    razorpay_reconciliation_retry_delay_seconds: int = (
-        60
-    )
+    razorpay_reconciliation_retry_delay_seconds: int = 60
 
     # Includes the first check and all retries.
     razorpay_reconciliation_max_attempts: int = 10
@@ -71,9 +80,7 @@ class Settings(BaseSettings):
     # Ollama shadow evaluation.
     ai_shadow_mode_enabled: bool = True
 
-    ollama_base_url: str = (
-        "http://127.0.0.1:11434"
-    )
+    ollama_base_url: str = "http://127.0.0.1:11434"
 
     ollama_model: str = "llama3:latest"
 

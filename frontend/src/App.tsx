@@ -1,6 +1,7 @@
 import type { LucideIcon } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { AIInsights } from "./components/AIInsights";
+import { LiveRecoveryConsole } from "./components/LiveRecoveryConsole";
 import { getHealth } from "./api/health";
 import {
   getRecoveryCases,
@@ -47,6 +48,7 @@ type CaseLoadState = "loading" | "ready" | "error";
 
 type ActivePage =
   | "overview"
+  | "demo-console"
   | "cases"
   | "events"
   | "decisions"
@@ -243,6 +245,7 @@ export default function App() {
 
   const pageLabels: Record<ActivePage, string> = {
     overview: "Overview",
+    "demo-console": "Live Recovery Console",
     cases: "Recovery cases",
     events: "Payment events",
     decisions: "Decision history",
@@ -351,7 +354,7 @@ export default function App() {
       title: "Recoverable revenue",
       value:
         caseLoadState === "loading"
-          ? "—"
+          ? "â€”"
           : formatMoney(totalRecoverable, currency),
       description: `${recoveryCases.length} cases in current view`,
       icon: IndianRupee,
@@ -360,7 +363,7 @@ export default function App() {
       title: "Recovered revenue",
       value:
         caseLoadState === "loading"
-          ? "—"
+          ? "â€”"
           : formatMoney(totalRecovered, currency),
       description: "Recorded by completed recoveries",
       icon: CheckCircle2,
@@ -369,7 +372,7 @@ export default function App() {
       title: "Active cases",
       value:
         caseLoadState === "loading"
-          ? "—"
+          ? "â€”"
           : String(activeCases),
       description: "Cases awaiting completion",
       icon: RefreshCcw,
@@ -378,7 +381,7 @@ export default function App() {
       title: "Recovery rate",
       value:
         caseLoadState === "loading"
-          ? "—"
+          ? "â€”"
           : `${recoveryRate.toFixed(1)}%`,
       description: "Recovered amount against recoverable value",
       icon: Activity,
@@ -506,6 +509,22 @@ export default function App() {
           >
             <LayoutDashboard size={18} />
             Overview
+          </button>
+
+          <button
+            className={`navigation-item ${
+              activePage === "demo-console"
+                ? "navigation-item--active"
+                : ""
+            }`}
+            type="button"
+            onClick={() => {
+              setActivePage("demo-console");
+              setSelectedCaseId(null);
+            }}
+          >
+            <Activity size={18} />
+            Live demo
           </button>
 
           <button
@@ -691,7 +710,7 @@ export default function App() {
               <div className="chart-summary">
                 <strong>
                   {caseLoadState === "loading"
-                    ? "—"
+                    ? "â€”"
                     : formatMoney(totalRecovered, currency)}
                 </strong>
                 <span>Last 7 days</span>
@@ -944,6 +963,18 @@ export default function App() {
             </div>
           </section>
             </>
+          )}
+
+          {activePage === "demo-console" && (
+            <LiveRecoveryConsole
+              recoveryCases={recoveryCases}
+              caseLoadState={caseLoadState}
+              casesError={casesError}
+              onRefreshCases={() =>
+                void loadRecoveryCases()
+              }
+              onOpenCase={setSelectedCaseId}
+            />
           )}
 
           {activePage === "cases" && (

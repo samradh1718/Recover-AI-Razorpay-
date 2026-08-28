@@ -161,8 +161,43 @@ def build_payload(
 ) -> dict:
     # Razorpay webhook amounts use minor currency units.
     # RecoverAI converts them at the provider boundary and
-    # presents/stores business values in rupees.
+    # stores business values in rupees.
     amount_paise = int(amount_rupees * 100)
+
+    payment_entity = {
+        "id": payment_id,
+        "entity": "payment",
+        "amount": amount_paise,
+        "currency": "INR",
+        "status": "failed",
+        "customer_id": customer_id,
+        "error_code": scenario.error_code,
+        "error_description": (
+            scenario.error_description
+        ),
+        "error_source": scenario.error_source,
+        "error_step": scenario.error_step,
+        "error_reason": scenario.error_reason,
+        "notes": {
+            "recoverai_test_run_id": run_id,
+            "scenario": scenario.name,
+        },
+    }
+
+    customer_email = (
+        settings.demo_customer_email.strip()
+    )
+
+    customer_contact = (
+        settings.demo_customer_contact.strip()
+    )
+
+    # Empty recipient values are omitted completely.
+    if customer_email:
+        payment_entity["email"] = customer_email
+
+    if customer_contact:
+        payment_entity["contact"] = customer_contact
 
     return {
         "entity": "event",
@@ -171,38 +206,11 @@ def build_payload(
         "contains": ["payment"],
         "payload": {
             "payment": {
-                "entity": {
-                    "id": payment_id,
-                    "entity": "payment",
-                    "amount": amount_paise,
-                    "currency": "INR",
-                    "status": "failed",
-                    "customer_id": customer_id,
-                    "error_code": (
-                        scenario.error_code
-                    ),
-                    "error_description": (
-                        scenario.error_description
-                    ),
-                    "error_source": (
-                        scenario.error_source
-                    ),
-                    "error_step": (
-                        scenario.error_step
-                    ),
-                    "error_reason": (
-                        scenario.error_reason
-                    ),
-                    "notes": {
-                        "recoverai_test_run_id": run_id,
-                        "scenario": scenario.name,
-                    },
-                }
+                "entity": payment_entity,
             }
         },
         "created_at": int(time.time()),
     }
-
 
 def encode_and_sign(
     payload: dict,

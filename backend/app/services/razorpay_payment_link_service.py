@@ -277,6 +277,8 @@ def decode_provider_response(
 def create_standard_payment_link(
     recovery_case: RecoveryCase,
     decision: RecoveryDecision,
+    customer_email: str | None = None,
+    customer_contact: str | None = None,
 ) -> dict[str, Any]:
     """Create one Standard Payment Link in Razorpay Test Mode."""
 
@@ -310,6 +312,63 @@ def create_standard_payment_link(
         or "not_available"
     )
 
+    if isinstance(customer_email, str):
+        customer_email = (
+            customer_email.strip() or None
+        )
+    else:
+        customer_email = None
+
+    if isinstance(customer_contact, str):
+        customer_contact = (
+            customer_contact.strip() or None
+        )
+    else:
+        customer_contact = None
+
+    notifications_enabled = (
+        settings
+        .razorpay_customer_notifications_enabled
+    )
+
+    notification_channel = (
+        settings.razorpay_notification_channel
+    )
+
+    if (
+        notifications_enabled
+        and notification_channel == "email"
+        and customer_email is None
+    ):
+        raise RazorpayPaymentLinkError(
+            "Customer email is required for "
+            "Razorpay email notification"
+        )
+
+    if (
+        notifications_enabled
+        and notification_channel == "sms"
+        and customer_contact is None
+    ):
+        raise RazorpayPaymentLinkError(
+            "Customer contact is required for "
+            "Razorpay SMS notification"
+        )
+
+    notify_email = (
+        notifications_enabled
+        and notification_channel == "email"
+    )
+
+    notify_sms = (
+        notifications_enabled
+        and notification_channel == "sms"
+    )
+
+    notification_requested = (
+        notify_email or notify_sms
+    )
+
     request_payload: dict[str, Any] = {
         "amount": amount_paise,
         "currency": currency,
@@ -322,10 +381,9 @@ def create_standard_payment_link(
         "expire_by": calculate_expire_by(
             recovery_case
         ),
-        # No automatic email or SMS is sent.
         "notify": {
-            "sms": False,
-            "email": False,
+            "sms": notify_sms,
+            "email": notify_email,
         },
         "notes": {
             "recoverai_case_id": str(
@@ -339,6 +397,23 @@ def create_standard_payment_link(
             ),
         },
     }
+
+    customer_payload: dict[str, str] = {}
+
+    if customer_email is not None:
+        customer_payload["email"] = (
+            customer_email
+        )
+
+    if customer_contact is not None:
+        customer_payload["contact"] = (
+            customer_contact
+        )
+
+    if customer_payload:
+        request_payload["customer"] = (
+            customer_payload
+        )
 
     try:
         response = httpx.post(
@@ -472,9 +547,18 @@ def create_standard_payment_link(
         "amount_paise_sent_to_provider": (
             amount_paise
         ),
+        # A successful Payment Link API response means
+        # Razorpay accepted the notification request.
+        # It does not prove end-device delivery.
+        "notification_requested": (
+            notification_requested
+        ),
+        "notification_channel": (
+            notification_channel
+            if notification_requested
+            else None
+        ),
     }
-
-
 def fetch_payment_link(
     provider_action_id: str,
 ) -> dict[str, Any]:

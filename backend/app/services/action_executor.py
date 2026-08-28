@@ -17,6 +17,7 @@ from app.models import (
     RecoveryCase,
     RecoveryDecision,
 )
+from app.models.payment_event import PaymentEvent
 from app.services.razorpay_payment_link_service import (
     RazorpayPaymentLinkError,
     create_standard_payment_link,
@@ -62,6 +63,84 @@ def _as_utc(value: datetime) -> datetime:
         )
 
     return value.astimezone(timezone.utc)
+
+
+def _optional_string(
+    value: Any,
+) -> str | None:
+    if not isinstance(value, str):
+        return None
+
+    cleaned_value = value.strip()
+
+    return cleaned_value or None
+
+
+def _resolve_customer_recipient(
+    database: Session,
+    recovery_case: RecoveryCase,
+) -> tuple[str | None, str | None]:
+    provider_payment_id = (
+        recovery_case.provider_payment_id
+    )
+
+    if provider_payment_id is None:
+        return None, None
+
+    payment_event = database.execute(
+        select(PaymentEvent)
+        .where(
+            PaymentEvent.tenant_id
+            == recovery_case.tenant_id,
+            PaymentEvent.provider_payment_id
+            == provider_payment_id,
+            PaymentEvent.event_type
+            == "payment.failed",
+        )
+        .order_by(
+            PaymentEvent.received_at.desc()
+        )
+        .limit(1)
+    ).scalar_one_or_none()
+
+    if payment_event is None:
+        return None, None
+
+    event_payload = payment_event.payload
+
+    if not isinstance(event_payload, dict):
+        return None, None
+
+    provider_payload = event_payload.get(
+        "payload"
+    )
+
+    if not isinstance(provider_payload, dict):
+        return None, None
+
+    payment_container = provider_payload.get(
+        "payment"
+    )
+
+    if not isinstance(payment_container, dict):
+        return None, None
+
+    payment_entity = payment_container.get(
+        "entity"
+    )
+
+    if not isinstance(payment_entity, dict):
+        return None, None
+
+    customer_email = _optional_string(
+        payment_entity.get("email")
+    )
+
+    customer_contact = _optional_string(
+        payment_entity.get("contact")
+    )
+
+    return customer_email, customer_contact
 
 
 def _execution_result(
@@ -151,12 +230,63 @@ def _store_provider_result(
         "provider_response"
     )
 
+    notification_requested = bool(
+        provider_result.get(
+            "notification_requested",
+            False,
+        )
+    )
+
+    notification_channel = (
+        provider_result.get(
+            "notification_channel"
+        )
+    )
+
+    if not isinstance(
+        notification_channel,
+        str,
+    ):
+        notification_channel = None
+
     if isinstance(provider_response, dict):
-        decision.provider_response = (
+        safe_provider_response = dict(
             provider_response
         )
+
+        # This records provider request acceptance,
+        # not end-device delivery.
+        safe_provider_response[
+            "recoverai_notification"
+        ] = {
+            "requested": (
+                notification_requested
+            ),
+            "channel": notification_channel,
+            "status": (
+                "request_accepted"
+                if notification_requested
+                else "disabled"
+            ),
+        }
+
+        decision.provider_response = (
+            safe_provider_response
+        )
     else:
-        decision.provider_response = None
+        decision.provider_response = {
+            "recoverai_notification": {
+                "requested": (
+                    notification_requested
+                ),
+                "channel": notification_channel,
+                "status": (
+                    "request_accepted"
+                    if notification_requested
+                    else "disabled"
+                ),
+            }
+        }
 
 
 def execute_recovery_action(
@@ -302,6 +432,8 @@ def execute_recovery_action(
     # Real provider execution is permitted only for
     # customer-facing recovery actions and only when
     # the explicit environment switch is enabled.
+    notification_requested = False
+
     should_create_payment_link = (
         settings.razorpay_actions_enabled
         and action
@@ -309,11 +441,22 @@ def execute_recovery_action(
     )
 
     if should_create_payment_link:
+        customer_email, customer_contact = (
+            _resolve_customer_recipient(
+                database=database,
+                recovery_case=recovery_case,
+            )
+        )
+
         try:
             provider_result = (
                 create_standard_payment_link(
                     recovery_case=recovery_case,
                     decision=decision,
+                    customer_email=customer_email,
+                    customer_contact=(
+                        customer_contact
+                    ),
                 )
             )
         except RazorpayPaymentLinkError:
@@ -322,13 +465,21 @@ def execute_recovery_action(
             database.rollback()
             raise
 
+        notification_requested = bool(
+            provider_result.get(
+                "notification_requested",
+                False,
+            )
+        )
+
         _store_provider_result(
             decision=decision,
             provider_result=provider_result,
         )
     else:
-        # Retry-payment remains simulated because a real
-        # recurring retry requires a provider token or mandate.
+        # Provider execution and customer notification
+        # are simulated when actions are disabled. A real
+        # retry requires a provider token or mandate.
         decision.execution_mode = "simulated"
 
     recovery_case.current_state = (
@@ -346,7 +497,12 @@ def execute_recovery_action(
         )
 
     elif action in CUSTOMER_COMMUNICATION_ACTIONS:
-        recovery_case.communication_count += 1
+        # Increment only after Razorpay accepts a configured
+        # notification request. Link creation by itself is not
+        # counted as customer communication.
+        if notification_requested:
+            recovery_case.communication_count += 1
+
         recovery_case.current_state = (
             RecoveryCaseState.WAITING_FOR_CUSTOMER
         )
@@ -384,7 +540,6 @@ def execute_recovery_action(
         RecoveryDecisionStatus.EXECUTED
     )
     decision.executed_at = now
-
     decision.updated_at = now
 
     database.commit()

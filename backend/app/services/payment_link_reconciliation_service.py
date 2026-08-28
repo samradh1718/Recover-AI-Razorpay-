@@ -259,9 +259,51 @@ def reconcile_payment_link(
     decision.provider_action_status = provider_result[
         "provider_action_status"
     ]
-    decision.provider_response = provider_result[
-        "provider_response"
-    ]
+    existing_provider_response = (
+        decision.provider_response
+    )
+
+    new_provider_response = (
+        provider_result.get(
+            "provider_response"
+        )
+    )
+
+    if isinstance(
+        new_provider_response,
+        dict,
+    ):
+        merged_provider_response = dict(
+            new_provider_response
+        )
+    else:
+        merged_provider_response = {}
+
+    # Preserve RecoverAI-owned audit metadata when a fresh
+    # Razorpay status snapshot replaces provider fields.
+    if isinstance(
+        existing_provider_response,
+        dict,
+    ):
+        notification_metadata = (
+            existing_provider_response.get(
+                "recoverai_notification"
+            )
+        )
+
+        if isinstance(
+            notification_metadata,
+            dict,
+        ):
+            merged_provider_response[
+                "recoverai_notification"
+            ] = dict(
+                notification_metadata
+            )
+
+    decision.provider_response = (
+        merged_provider_response
+    )
     decision.updated_at = utc_now()
 
     provider_status = str(

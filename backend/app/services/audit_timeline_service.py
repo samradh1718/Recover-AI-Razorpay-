@@ -397,6 +397,108 @@ def get_case_audit_timeline(
                     },
                 )
             )
+            provider_response = (
+                decision.provider_response
+            )
+
+            notification_details: (
+                dict[str, Any] | None
+            ) = None
+
+            if isinstance(
+                provider_response,
+                dict,
+            ):
+                stored_notification = (
+                    provider_response.get(
+                        "recoverai_notification"
+                    )
+                )
+
+                if isinstance(
+                    stored_notification,
+                    dict,
+                ):
+                    notification_details = (
+                        stored_notification
+                    )
+
+            if (
+                notification_details is not None
+                and notification_details.get(
+                    "requested"
+                )
+                is True
+            ):
+                notification_channel = (
+                    notification_details.get(
+                        "channel"
+                    )
+                )
+
+                if not isinstance(
+                    notification_channel,
+                    str,
+                ):
+                    notification_channel = (
+                        "unknown"
+                    )
+
+                notification_status = (
+                    notification_details.get(
+                        "status"
+                    )
+                )
+
+                if not isinstance(
+                    notification_status,
+                    str,
+                ):
+                    notification_status = (
+                        "request_accepted"
+                    )
+
+                events.append(
+                    build_event(
+                        event_id=(
+                            f"decision:{decision.id}:"
+                            "customer-notification-requested"
+                        ),
+                        event_type=(
+                            "customer_notification_requested"
+                        ),
+                        title=(
+                            f"Customer "
+                            f"{notification_channel} "
+                            "notification requested"
+                        ),
+                        description=(
+                            "Razorpay accepted the request "
+                            "to send the recovery Payment "
+                            f"Link by {notification_channel}."
+                        ),
+                        source="razorpay",
+                        status=notification_status,
+                        occurred_at=provider_created_at,
+                        details={
+                            "decision_id": decision.id,
+                            "provider_action_id": (
+                                decision
+                                .provider_action_id
+                            ),
+                            "notification_channel": (
+                                notification_channel
+                            ),
+                            "notification_status": (
+                                notification_status
+                            ),
+                            # Razorpay request acceptance
+                            # does not prove inbox/device
+                            # delivery.
+                            "delivery_confirmed": False,
+                        },
+                    )
+                )
 
         if (
             decision.provider_action_status == "paid"
