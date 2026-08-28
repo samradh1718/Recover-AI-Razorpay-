@@ -244,6 +244,30 @@ def get_case_audit_timeline(
             or decision.recommended_action
         )
 
+        decision_inputs = decision.decision_inputs
+
+        if not isinstance(decision_inputs, dict):
+            decision_inputs = {}
+
+        policy_delay_minutes = decision_inputs.get(
+            "policy_delay_minutes"
+        )
+
+        effective_delay_seconds = decision_inputs.get(
+            "effective_delay_seconds"
+        )
+
+        schedule_mode = decision_inputs.get(
+            "schedule_mode"
+        )
+
+        if not isinstance(schedule_mode, str):
+            schedule_mode = (
+                "policy_delay"
+                if decision.scheduled_for is not None
+                else "not_scheduled"
+            )
+
         events.append(
             build_event(
                 event_id=(
@@ -293,11 +317,30 @@ def get_case_audit_timeline(
                     "scheduled_for": (
                         decision.scheduled_for
                     ),
+                    "policy_delay_minutes": (
+                        policy_delay_minutes
+                    ),
+                    "effective_delay_seconds": (
+                        effective_delay_seconds
+                    ),
+                    "schedule_mode": schedule_mode,
                 },
             )
         )
 
         if decision.scheduled_for is not None:
+            if schedule_mode == "demo_override":
+                schedule_description = (
+                    f"{get_value(production_action)} "
+                    "was scheduled using the demo "
+                    "execution-time override."
+                )
+            else:
+                schedule_description = (
+                    f"{get_value(production_action)} "
+                    "was scheduled for execution."
+                )
+
             events.append(
                 build_event(
                     event_id=(
@@ -305,10 +348,7 @@ def get_case_audit_timeline(
                     ),
                     event_type="action_scheduled",
                     title="Recovery action scheduled",
-                    description=(
-                        f"{get_value(production_action)} "
-                        "was scheduled for execution."
-                    ),
+                    description=schedule_description,
                     source="rules_engine",
                     status="scheduled",
                     occurred_at=decision.created_at,
@@ -318,6 +358,13 @@ def get_case_audit_timeline(
                         "scheduled_for": (
                             decision.scheduled_for
                         ),
+                        "policy_delay_minutes": (
+                            policy_delay_minutes
+                        ),
+                        "effective_delay_seconds": (
+                            effective_delay_seconds
+                        ),
+                        "schedule_mode": schedule_mode,
                     },
                 )
             )

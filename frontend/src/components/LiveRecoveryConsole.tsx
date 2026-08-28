@@ -4,6 +4,7 @@ import {
   BrainCircuit,
   CheckCircle2,
   CircleDashed,
+  Clock3,
   ExternalLink,
   IndianRupee,
   Link2,
@@ -146,6 +147,26 @@ function eventExists(
   return events.some(
     (event) => event.event_type === eventType,
   );
+}
+
+
+function formatDuration(
+  value: unknown,
+  unit: "minute" | "second",
+): string {
+  const duration = Number(value);
+
+  if (!Number.isFinite(duration)) {
+    return "Not recorded";
+  }
+
+  const roundedDuration = Number.isInteger(duration)
+    ? duration
+    : Number(duration.toFixed(2));
+
+  return `${roundedDuration} ${unit}${
+    roundedDuration === 1 ? "" : "s"
+  }`;
 }
 
 
@@ -308,6 +329,11 @@ export function LiveRecoveryConsole({
       event.details.event_type === "payment.failed",
   );
 
+  const scheduledEvent = events.find(
+    (event) =>
+      event.event_type === "action_scheduled",
+  );
+
   const linkEvent = events.find(
     (event) =>
       event.event_type === "provider_action_created",
@@ -359,6 +385,24 @@ export function LiveRecoveryConsole({
     notificationEvent,
     "notification_status",
   );
+
+  const policyDelayMinutes = detailValue(
+    scheduledEvent,
+    "policy_delay_minutes",
+  );
+
+  const effectiveDelaySeconds = detailValue(
+    scheduledEvent,
+    "effective_delay_seconds",
+  );
+
+  const scheduleMode = detailValue(
+    scheduledEvent,
+    "schedule_mode",
+  );
+
+  const isDemoSchedule =
+    scheduleMode === "demo_override";
 
   const recoveredAmount =
     detailValue(
@@ -646,6 +690,79 @@ export function LiveRecoveryConsole({
               <ExternalLink size={13} />
             </button>
           </section>
+
+          {scheduledEvent && (
+            <section
+              className={
+                isDemoSchedule
+                  ? "live-schedule-proof live-schedule-proof--demo"
+                  : "live-schedule-proof"
+              }
+            >
+              <div className="live-schedule-proof-heading">
+                <div className="live-schedule-proof-icon">
+                  <Clock3 size={20} />
+                </div>
+
+                <div>
+                  <span>Execution timing</span>
+                  <h2>
+                    {isDemoSchedule
+                      ? "Policy-safe demo override"
+                      : "Policy execution schedule"}
+                  </h2>
+                  <p>
+                    {isDemoSchedule
+                      ? "The production rule remains unchanged while only the live-demo execution wait is shortened."
+                      : "The action follows the delay selected by the production policy."}
+                  </p>
+                </div>
+              </div>
+
+              <dl className="live-schedule-proof-values">
+                <div>
+                  <dt>Production policy</dt>
+                  <dd>
+                    {formatDuration(
+                      policyDelayMinutes,
+                      "minute",
+                    )}
+                  </dd>
+                </div>
+
+                <div>
+                  <dt>Effective wait</dt>
+                  <dd>
+                    {formatDuration(
+                      effectiveDelaySeconds,
+                      "second",
+                    )}
+                  </dd>
+                </div>
+
+                <div>
+                  <dt>Schedule mode</dt>
+                  <dd>
+                    {typeof scheduleMode === "string"
+                      ? readable(scheduleMode)
+                      : "Not recorded"}
+                  </dd>
+                </div>
+              </dl>
+
+              <span
+                className={
+                  isDemoSchedule
+                    ? "live-schedule-badge live-schedule-badge--active"
+                    : "live-schedule-badge"
+                }
+              >
+                {isDemoSchedule
+                  ? "Demo override active"
+                  : "Policy timing active"}
+              </span>
+            </section>
+          )}
 
           <section className="live-pipeline-card">
             <div className="live-section-heading">
