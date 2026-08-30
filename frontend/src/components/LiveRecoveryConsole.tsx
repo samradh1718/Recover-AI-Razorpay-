@@ -34,7 +34,10 @@ import {
   type RecoveryDecisionResponse,
 } from "../api/decisions";
 
+import { TestCheckoutPanel } from "./TestCheckoutPanel";
+
 import "./LiveRecoveryConsole.css";
+import "./TestCheckoutPanel.css";
 
 
 type DataState = "loading" | "ready" | "error";
@@ -641,6 +644,10 @@ export function LiveRecoveryConsole({
           </button>
         </div>
       </header>
+
+      <TestCheckoutPanel
+        onProviderActivity={handleRefresh}
+      />
 
       {selectedCase && (
         <>

@@ -76,6 +76,12 @@ class Settings(BaseSettings):
     # Valid enabled range is checked by the decision
     # engine and is limited to 0-300 seconds.
     demo_action_delay_seconds: int | None = None
+        # Provider-generated real-time Test Mode checkout.
+    # Disabled unless explicitly enabled locally.
+    razorpay_test_checkout_enabled: bool = False
+
+    # Safety ceiling for one demo Test Mode order.
+    razorpay_test_checkout_max_amount_rupees: int = 10000
 
     # Webhook fallback reconciliation.
     razorpay_reconciliation_enabled: bool = True
