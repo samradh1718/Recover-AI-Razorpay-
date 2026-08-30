@@ -1,4 +1,8 @@
-from datetime import datetime, timedelta, timezone
+from datetime import (
+    datetime,
+    timedelta,
+    timezone,
+)
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Any
 from uuid import UUID
@@ -6,7 +10,10 @@ from uuid import UUID
 import httpx
 
 from app.core.config import settings
-from app.models import RecoveryCase, RecoveryDecision
+from app.models import (
+    RecoveryCase,
+    RecoveryDecision,
+)
 
 
 RAZORPAY_PAYMENT_LINK_URL = (
@@ -54,11 +61,7 @@ def as_utc(value: datetime) -> datetime:
 def rupees_to_paise(
     amount_rupees: Decimal,
 ) -> int:
-    """Convert database rupees to Razorpay API paise.
-
-    The database continues storing rupees. Conversion happens
-    only at the Razorpay API boundary.
-    """
+    """Convert database rupees to Razorpay API paise."""
 
     amount = Decimal(
         str(amount_rupees)
@@ -232,6 +235,147 @@ def extract_provider_error(
     return fallback
 
 
+def build_safe_payment_snapshots(
+    response_body: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Remove customer and instrument details from payments."""
+
+    payments = response_body.get(
+        "payments"
+    )
+
+    if not isinstance(payments, list):
+        return []
+
+    safe_payment_fields = (
+        "payment_id",
+        "plink_id",
+        "amount",
+        "status",
+        "method",
+        "created_at",
+        "updated_at",
+    )
+
+    return [
+        {
+            field: payment.get(field)
+            for field in safe_payment_fields
+            if field in payment
+        }
+        for payment in payments
+        if isinstance(payment, dict)
+    ]
+
+def extract_captured_payment(
+    *,
+    response_body: dict[str, Any],
+    provider_action_id: str,
+) -> dict[str, Any] | None:
+    """Find the newest captured payment for this Payment Link."""
+
+    payments = response_body.get(
+        "payments"
+    )
+
+    if payments is None:
+        return None
+
+    if not isinstance(payments, list):
+        raise RazorpayProviderError(
+            "Razorpay returned an invalid "
+            "Payment Link payments collection"
+        )
+
+    captured_payments: list[
+        dict[str, Any]
+    ] = []
+
+    for payment in payments:
+        if not isinstance(payment, dict):
+            continue
+
+        payment_id = payment.get(
+            "payment_id"
+        )
+
+        payment_link_id = (
+            payment.get("plink_id")
+            or payment.get(
+                "payment_link_id"
+            )
+        )
+
+        payment_status = str(
+            payment.get("status")
+            or ""
+        ).strip().lower()
+
+        payment_amount = payment.get(
+            "amount"
+        )
+
+        if payment_status != "captured":
+            continue
+
+        # Razorpay may omit plink_id inside the payments
+        # collection returned by the already-scoped
+        # /payment_links/{id} endpoint. If it is present,
+        # it must match the requested Payment Link.
+        if (
+            payment_link_id is not None
+            and payment_link_id
+            != provider_action_id
+        ):
+            continue
+
+        if (
+            not isinstance(payment_id, str)
+            or not payment_id.startswith("pay_")
+        ):
+            raise RazorpayProviderError(
+                "Razorpay captured payment is "
+                "missing a valid Payment ID"
+            )
+
+        if (
+            isinstance(payment_amount, bool)
+            or not isinstance(
+                payment_amount,
+                int,
+            )
+            or payment_amount <= 0
+        ):
+            raise RazorpayProviderError(
+                "Razorpay captured payment "
+                "contains an invalid amount"
+            )
+
+        captured_payments.append(
+            payment
+        )
+
+    if not captured_payments:
+        return None
+
+    return max(
+        captured_payments,
+        key=lambda payment: (
+            payment.get("updated_at")
+            if isinstance(
+                payment.get("updated_at"),
+                int,
+            )
+            else 0,
+            payment.get("created_at")
+            if isinstance(
+                payment.get("created_at"),
+                int,
+            )
+            else 0,
+        ),
+    )
+
 def build_safe_provider_snapshot(
     response_body: dict[str, Any],
 ) -> dict[str, Any]:
@@ -239,6 +383,7 @@ def build_safe_provider_snapshot(
 
     safe_fields = (
         "id",
+        "order_id",
         "reference_id",
         "short_url",
         "status",
@@ -250,12 +395,20 @@ def build_safe_provider_snapshot(
         "expire_by",
         "expired_at",
     )
-
-    return {
+    snapshot = {
         field: response_body.get(field)
         for field in safe_fields
         if field in response_body
     }
+
+    if "payments" in response_body:
+        snapshot["payments"] = (
+            build_safe_payment_snapshots(
+                response_body
+            )
+        )
+
+    return snapshot
 
 
 def decode_provider_response(
@@ -307,21 +460,23 @@ def create_standard_payment_link(
         decision.id
     )
 
-    provider_payment_id = (
+    failed_provider_payment_id = (
         recovery_case.provider_payment_id
         or "not_available"
     )
 
     if isinstance(customer_email, str):
         customer_email = (
-            customer_email.strip() or None
+            customer_email.strip()
+            or None
         )
     else:
         customer_email = None
 
     if isinstance(customer_contact, str):
         customer_contact = (
-            customer_contact.strip() or None
+            customer_contact.strip()
+            or None
         )
     else:
         customer_contact = None
@@ -366,7 +521,8 @@ def create_standard_payment_link(
     )
 
     notification_requested = (
-        notify_email or notify_sms
+        notify_email
+        or notify_sms
     )
 
     request_payload: dict[str, Any] = {
@@ -375,7 +531,7 @@ def create_standard_payment_link(
         "accept_partial": False,
         "description": (
             "RecoverAI payment recovery for "
-            f"{provider_payment_id}"
+            f"{failed_provider_payment_id}"
         ),
         "reference_id": reference_id,
         "expire_by": calculate_expire_by(
@@ -392,13 +548,16 @@ def create_standard_payment_link(
             "recoverai_decision_id": str(
                 decision.id
             ),
-            "provider_payment_id": (
-                provider_payment_id
+            "failed_provider_payment_id": (
+                failed_provider_payment_id
             ),
         },
     }
 
-    customer_payload: dict[str, str] = {}
+    customer_payload: dict[
+        str,
+        str,
+    ] = {}
 
     if customer_email is not None:
         customer_payload["email"] = (
@@ -547,8 +706,7 @@ def create_standard_payment_link(
         "amount_paise_sent_to_provider": (
             amount_paise
         ),
-        # A successful Payment Link API response means
-        # Razorpay accepted the notification request.
+        # Accepted means Razorpay accepted the request.
         # It does not prove end-device delivery.
         "notification_requested": (
             notification_requested
@@ -559,6 +717,8 @@ def create_standard_payment_link(
             else None
         ),
     }
+
+
 def fetch_payment_link(
     provider_action_id: str,
 ) -> dict[str, Any]:
@@ -706,7 +866,11 @@ def fetch_payment_link(
 
     if (
         isinstance(amount_paise, bool)
-        or not isinstance(amount_paise, int)
+        or not isinstance(
+            amount_paise,
+            int,
+        )
+        or amount_paise <= 0
     ):
         raise RazorpayProviderError(
             "Razorpay response contains "
@@ -722,20 +886,63 @@ def fetch_payment_link(
             amount_paid_paise,
             int,
         )
+        or amount_paid_paise < 0
     ):
         raise RazorpayProviderError(
             "Razorpay response contains "
             "an invalid paid amount"
         )
 
+    if amount_paid_paise > amount_paise:
+        raise RazorpayProviderError(
+            "Razorpay paid amount exceeds "
+            "the Payment Link amount"
+        )
+
+    normalized_provider_status = (
+        provider_action_status
+        .strip()
+        .lower()
+    )
+
+    captured_payment = (
+        extract_captured_payment(
+            response_body=response_body,
+            provider_action_id=(
+                provider_action_id
+            ),
+        )
+    )
+
     if (
-        amount_paise < 0
-        or amount_paid_paise < 0
+        normalized_provider_status == "paid"
+        and captured_payment is None
     ):
         raise RazorpayProviderError(
-            "Razorpay response contains "
-            "a negative amount"
+            "Razorpay marked the Payment Link paid "
+            "without returning captured payment evidence"
         )
+
+    recovered_provider_payment_id = None
+
+    if captured_payment is not None:
+        recovered_provider_payment_id = str(
+            captured_payment["payment_id"]
+        )
+
+        captured_amount_paise = int(
+            captured_payment["amount"]
+        )
+
+        if (
+            normalized_provider_status == "paid"
+            and captured_amount_paise
+            != amount_paid_paise
+        ):
+            raise RazorpayProviderError(
+                "Captured payment amount does not "
+                "match the Payment Link paid amount"
+            )
 
     return {
         "provider_action_id": (
@@ -754,6 +961,9 @@ def fetch_payment_link(
         "amount_paise": amount_paise,
         "amount_paid_paise": (
             amount_paid_paise
+        ),
+        "provider_payment_id": (
+            recovered_provider_payment_id
         ),
         "provider_response": (
             build_safe_provider_snapshot(

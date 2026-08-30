@@ -64,7 +64,6 @@ def _as_utc(value: datetime) -> datetime:
 
     return value.astimezone(timezone.utc)
 
-
 def _optional_string(
     value: Any,
 ) -> str | None:
@@ -74,6 +73,80 @@ def _optional_string(
     cleaned_value = value.strip()
 
     return cleaned_value or None
+
+
+def _is_true_marker(value: Any) -> bool:
+    if value is True:
+        return True
+
+    if not isinstance(value, str):
+        return False
+
+    return value.strip().lower() == "true"
+
+
+def _is_false_marker(value: Any) -> bool:
+    if value is False:
+        return True
+
+    if not isinstance(value, str):
+        return False
+
+    return value.strip().lower() == "false"
+
+
+def _is_verified_test_checkout_payment(
+    payment_entity: dict[str, Any],
+) -> bool:
+    if settings.razorpay_mode != "test":
+        return False
+
+    if not (
+        settings.razorpay_test_checkout_enabled
+    ):
+        return False
+
+    notes = payment_entity.get("notes")
+
+    if not isinstance(notes, dict):
+        return False
+
+    data_source = _optional_string(
+        notes.get(
+            "recoverai_data_source"
+        )
+    )
+
+    provider_order_id = _optional_string(
+        notes.get(
+            "recoverai_provider_order_id"
+        )
+    )
+
+    test_order_id = _optional_string(
+        notes.get(
+            "recoverai_test_order_id"
+        )
+    )
+
+    return (
+        data_source == "razorpay_server_api"
+        and _is_true_marker(
+            notes.get(
+                "recoverai_provider_generated"
+            )
+        )
+        and _is_false_marker(
+            notes.get(
+                "recoverai_real_money"
+            )
+        )
+        and provider_order_id is not None
+        and provider_order_id.startswith(
+            "order_"
+        )
+        and test_order_id is not None
+    )
 
 
 def _resolve_customer_recipient(
@@ -140,8 +213,32 @@ def _resolve_customer_recipient(
         payment_entity.get("contact")
     )
 
-    return customer_email, customer_contact
+    if not _is_verified_test_checkout_payment(
+        payment_entity
+    ):
+        return (
+            customer_email,
+            customer_contact,
+        )
 
+    # Server-reconciled Test Checkout evidence is
+    # intentionally PII-safe and therefore does not
+    # retain the Checkout email/contact. Only for a
+    # cryptographically authenticated Razorpay Test Mode
+    # order carrying RecoverAI provenance markers may the
+    # configured demo recipient be used.
+    demo_email = _optional_string(
+        settings.demo_customer_email
+    )
+
+    demo_contact = _optional_string(
+        settings.demo_customer_contact
+    )
+
+    return (
+        customer_email or demo_email,
+        customer_contact or demo_contact,
+    )
 
 def _execution_result(
     *,

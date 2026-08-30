@@ -15,6 +15,9 @@ from app.api.v1.decisions import (
 from app.api.v1.health import (
     router as health_router,
 )
+from app.api.v1.human_reviews import (
+    router as human_reviews_router,
+)
 from app.api.v1.ml_shadow import (
     router as ml_shadow_router,
 )
@@ -37,6 +40,7 @@ api_router.include_router(health_router)
 api_router.include_router(cases_router)
 api_router.include_router(webhooks_router)
 api_router.include_router(decisions_router)
+api_router.include_router(human_reviews_router)
 api_router.include_router(payment_events_router)
 api_router.include_router(ai_shadow_router)
 api_router.include_router(ml_shadow_router)

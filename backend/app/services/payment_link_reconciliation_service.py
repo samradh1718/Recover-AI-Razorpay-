@@ -42,13 +42,19 @@ class PaymentLinkNotAvailableError(
 class PaymentLinkReferenceMismatchError(
     PaymentLinkReconciliationError
 ):
-    """Raised when Razorpay returns an unexpected reference."""
+    """Raised when Razorpay returns unexpected identifiers."""
 
 
 class PaymentLinkAmountMismatchError(
     PaymentLinkReconciliationError
 ):
     """Raised when the provider paid amount is unexpected."""
+
+
+class PaymentLinkPaymentEvidenceError(
+    PaymentLinkReconciliationError
+):
+    """Raised when captured-payment evidence is invalid."""
 
 
 def utc_now() -> datetime:
@@ -107,6 +113,7 @@ def cancel_pending_decisions(
         pending_decision.status = (
             RecoveryDecisionStatus.CANCELLED
         )
+
         pending_decision.scheduled_for = None
         pending_decision.updated_at = now
 
@@ -117,29 +124,150 @@ def reconciliation_result(
     decision: RecoveryDecision,
     recovery_case: RecoveryCase,
 ) -> dict[str, Any]:
+    recovered_payment_id = (
+        recovery_case
+        .recovered_provider_payment_id
+    )
+
+    failed_payment_id = (
+        recovery_case.provider_payment_id
+    )
+
     return {
         "status": status,
         "decision_id": str(decision.id),
         "case_id": str(recovery_case.id),
+
+        # Backward-compatible provider_payment_id now
+        # prefers the successful recovery payment.
         "provider_payment_id": (
-            recovery_case.provider_payment_id
+            recovered_payment_id
+            or failed_payment_id
         ),
+
+        "failed_provider_payment_id": (
+            failed_payment_id
+        ),
+
+        "recovered_provider_payment_id": (
+            recovered_payment_id
+        ),
+
         "provider_action_status": (
             decision.provider_action_status
         ),
+
         "case_state": (
             recovery_case.current_state.value
         ),
+
         "recoverable_amount_rupees": str(
-            recovery_case.recoverable_amount_rupees
+            recovery_case
+            .recoverable_amount_rupees
         ),
+
         "recovered_amount_rupees": str(
-            recovery_case.recovered_amount_rupees
+            recovery_case
+            .recovered_amount_rupees
         ),
+
         "execution_mode": (
             decision.execution_mode
         ),
     }
+
+
+def _validate_recovered_payment_id(
+    *,
+    provider_result: dict[str, Any],
+    recovery_case: RecoveryCase,
+) -> str:
+    recovered_payment_id = (
+        provider_result.get(
+            "provider_payment_id"
+        )
+    )
+
+    if (
+        not isinstance(
+            recovered_payment_id,
+            str,
+        )
+        or not recovered_payment_id.startswith(
+            "pay_"
+        )
+    ):
+        raise PaymentLinkPaymentEvidenceError(
+            "Paid Payment Link is missing a valid "
+            "captured Razorpay Payment ID"
+        )
+
+    if (
+        recovery_case.provider_payment_id
+        == recovered_payment_id
+    ):
+        raise PaymentLinkPaymentEvidenceError(
+            "Recovered payment ID must differ from "
+            "the original failed payment ID"
+        )
+
+    existing_recovered_payment_id = (
+        recovery_case
+        .recovered_provider_payment_id
+    )
+
+    if (
+        existing_recovered_payment_id
+        is not None
+        and existing_recovered_payment_id
+        != recovered_payment_id
+    ):
+        raise PaymentLinkPaymentEvidenceError(
+            "Recovery case is already linked to "
+            "a different captured payment"
+        )
+
+    return recovered_payment_id
+
+
+def _merge_provider_response(
+    *,
+    existing_provider_response: Any,
+    new_provider_response: Any,
+) -> dict[str, Any]:
+    if isinstance(
+        new_provider_response,
+        dict,
+    ):
+        merged_provider_response = dict(
+            new_provider_response
+        )
+    else:
+        merged_provider_response = {}
+
+    # Preserve RecoverAI-owned notification audit
+    # metadata while replacing Razorpay status fields.
+    if isinstance(
+        existing_provider_response,
+        dict,
+    ):
+        notification_metadata = (
+            existing_provider_response.get(
+                "recoverai_notification"
+            )
+        )
+
+        if isinstance(
+            notification_metadata,
+            dict,
+        ):
+            merged_provider_response[
+                "recoverai_notification"
+            ] = dict(
+                notification_metadata
+            )
+
+    return merged_provider_response
 
 
 def reconcile_payment_link(
@@ -149,12 +277,13 @@ def reconcile_payment_link(
     """Reconcile one recovery decision with Razorpay.
 
     Razorpay is queried before database rows are locked so an
-    external network request does not hold a PostgreSQL row lock.
+    external request does not hold a PostgreSQL row lock.
     """
 
     initial_decision = database.execute(
         select(RecoveryDecision).where(
-            RecoveryDecision.id == decision_id
+            RecoveryDecision.id
+            == decision_id
         )
     ).scalar_one_or_none()
 
@@ -181,7 +310,8 @@ def reconcile_payment_link(
             "a Razorpay Payment Link"
         )
 
-    # End the initial read transaction before calling Razorpay.
+    # Close the initial read transaction before
+    # performing the external provider request.
     database.rollback()
 
     provider_result = fetch_payment_link(
@@ -205,7 +335,8 @@ def reconcile_payment_link(
     decision = database.execute(
         select(RecoveryDecision)
         .where(
-            RecoveryDecision.id == decision_id
+            RecoveryDecision.id
+            == decision_id
         )
         .with_for_update()
     ).scalar_one_or_none()
@@ -218,7 +349,8 @@ def reconcile_payment_link(
     recovery_case = database.execute(
         select(RecoveryCase)
         .where(
-            RecoveryCase.id == recovery_case_id
+            RecoveryCase.id
+            == recovery_case_id
         )
         .with_for_update()
     ).scalar_one_or_none()
@@ -230,85 +362,76 @@ def reconcile_payment_link(
 
     if (
         decision.provider_action_id
-        != provider_result["provider_action_id"]
+        != provider_result[
+            "provider_action_id"
+        ]
     ):
         database.rollback()
 
         raise PaymentLinkReferenceMismatchError(
-            "Provider action changed during reconciliation"
+            "Provider action changed during "
+            "reconciliation"
         )
 
     if (
-        decision.provider_reference_id is not None
+        decision.provider_reference_id
+        is not None
         and decision.provider_reference_id
         != returned_reference_id
     ):
         database.rollback()
 
         raise PaymentLinkReferenceMismatchError(
-            "Provider reference changed during reconciliation"
+            "Provider reference changed during "
+            "reconciliation"
         )
 
-    decision.execution_mode = "razorpay_test"
-    decision.provider_reference_id = (
-        returned_reference_id
-    )
-    decision.provider_action_url = provider_result[
-        "provider_action_url"
-    ]
-    decision.provider_action_status = provider_result[
-        "provider_action_status"
-    ]
     existing_provider_response = (
         decision.provider_response
     )
 
-    new_provider_response = (
-        provider_result.get(
-            "provider_response"
+    merged_provider_response = (
+        _merge_provider_response(
+            existing_provider_response=(
+                existing_provider_response
+            ),
+            new_provider_response=(
+                provider_result.get(
+                    "provider_response"
+                )
+            ),
         )
     )
 
-    if isinstance(
-        new_provider_response,
-        dict,
-    ):
-        merged_provider_response = dict(
-            new_provider_response
-        )
-    else:
-        merged_provider_response = {}
+    decision.execution_mode = "razorpay_test"
 
-    # Preserve RecoverAI-owned audit metadata when a fresh
-    # Razorpay status snapshot replaces provider fields.
-    if isinstance(
-        existing_provider_response,
-        dict,
-    ):
-        notification_metadata = (
-            existing_provider_response.get(
-                "recoverai_notification"
-            )
-        )
+    decision.provider_reference_id = (
+        returned_reference_id
+    )
 
-        if isinstance(
-            notification_metadata,
-            dict,
-        ):
-            merged_provider_response[
-                "recoverai_notification"
-            ] = dict(
-                notification_metadata
-            )
+    decision.provider_action_url = (
+        provider_result[
+            "provider_action_url"
+        ]
+    )
+
+    decision.provider_action_status = (
+        provider_result[
+            "provider_action_status"
+        ]
+    )
 
     decision.provider_response = (
         merged_provider_response
     )
+
     decision.updated_at = utc_now()
 
     provider_status = str(
-        provider_result["provider_action_status"]
-    ).lower()
+        provider_result[
+            "provider_action_status"
+        ]
+    ).strip().lower()
 
     if provider_status != "paid":
         database.commit()
@@ -323,11 +446,11 @@ def reconcile_payment_link(
 
     provider_currency = str(
         provider_result["currency"]
-    ).upper()
+    ).strip().upper()
 
     case_currency = str(
         recovery_case.currency
-    ).upper()
+    ).strip().upper()
 
     if provider_currency != case_currency:
         database.rollback()
@@ -338,11 +461,9 @@ def reconcile_payment_link(
         )
 
     paid_amount_rupees = paise_to_rupees(
-        int(
-            provider_result[
-                "amount_paid_paise"
-            ]
-        )
+        provider_result[
+            "amount_paid_paise"
+        ]
     )
 
     recoverable_amount = Decimal(
@@ -363,17 +484,56 @@ def reconcile_payment_link(
             "the recoverable amount"
         )
 
+    recovered_payment_id = (
+        _validate_recovered_payment_id(
+            provider_result=provider_result,
+            recovery_case=recovery_case,
+        )
+    )
+
+    recovery_case.recovered_provider_payment_id = (
+        recovered_payment_id
+    )
+
+    merged_provider_response[
+        "failed_provider_payment_id"
+    ] = recovery_case.provider_payment_id
+
+    merged_provider_response[
+        "recovered_provider_payment_id"
+    ] = recovered_payment_id
+
+    decision.provider_response = (
+        merged_provider_response
+    )
+
+    existing_recovered_amount = Decimal(
+        str(
+            recovery_case
+            .recovered_amount_rupees
+        )
+    ).quantize(
+        MONEY_PRECISION,
+        rounding=ROUND_HALF_UP,
+    )
+
     if (
         recovery_case.current_state
         == RecoveryCaseState.RECOVERED
-        and Decimal(
-            str(
-                recovery_case
-                .recovered_amount_rupees
-            )
-        )
-        == recoverable_amount
     ):
+        if (
+            existing_recovered_amount
+            != recoverable_amount
+        ):
+            database.rollback()
+
+            raise PaymentLinkAmountMismatchError(
+                "Recovered case amount does not match "
+                "the provider-confirmed amount"
+            )
+
+        # This branch also backfills captured Payment IDs
+        # for cases recovered before this field existed.
         database.commit()
         database.refresh(decision)
         database.refresh(recovery_case)
@@ -389,12 +549,15 @@ def reconcile_payment_link(
     recovery_case.current_state = (
         RecoveryCaseState.RECOVERED
     )
+
     recovery_case.recovered_amount_rupees = (
         recoverable_amount
     )
+
     recovery_case.recovered_at = now
     recovery_case.closed_at = now
     recovery_case.next_action_at = None
+
     recovery_case.state_version += 1
     recovery_case.updated_at = now
 

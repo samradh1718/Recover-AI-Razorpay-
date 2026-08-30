@@ -1,6 +1,9 @@
 from app.models.ai_shadow_decision import (
     AIShadowDecision,
 )
+from app.models.human_review_resolution import (
+    HumanReviewResolution,
+)
 from app.models.ml_shadow_decision import (
     MLShadowDecision,
 )
@@ -16,6 +19,7 @@ from app.models.recovery_decision import (
 
 __all__ = [
     "AIShadowDecision",
+    "HumanReviewResolution",
     "MLShadowDecision",
     "PaymentEvent",
     "RazorpayTestOrder",

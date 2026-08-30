@@ -1,10 +1,15 @@
 from enum import Enum
 
+
 class RecoveryActionType(str, Enum):
     RETRY_PAYMENT = "retry_payment"
     SEND_PAYMENT_LINK = "send_payment_link"
-    REQUEST_PAYMENT_METHOD_UPDATE = "request_payment_method_update"
-    REQUEST_CUSTOMER_AUTHORIZATION = "request_customer_authorization"
+    REQUEST_PAYMENT_METHOD_UPDATE = (
+        "request_payment_method_update"
+    )
+    REQUEST_CUSTOMER_AUTHORIZATION = (
+        "request_customer_authorization"
+    )
     HUMAN_REVIEW = "human_review"
     STOP_RECOVERY = "stop_recovery"
 
@@ -24,11 +29,23 @@ class RecoveryDecisionStatus(str, Enum):
     CANCELLED = "cancelled"
     FAILED = "failed"
 
+
+class HumanReviewOutcome(str, Enum):
+    APPROVED = "approved"
+    REJECTED = "rejected"
+
+
 class FailureCategory(str, Enum):
-    TEMPORARY_GATEWAY_OR_BANK = "temporary_gateway_or_bank"
+    TEMPORARY_GATEWAY_OR_BANK = (
+        "temporary_gateway_or_bank"
+    )
     INSUFFICIENT_FUNDS = "insufficient_funds"
-    INVALID_OR_EXPIRED_METHOD = "invalid_or_expired_method"
-    MANDATE_OR_AUTHORIZATION = "mandate_or_authorization"
+    INVALID_OR_EXPIRED_METHOD = (
+        "invalid_or_expired_method"
+    )
+    MANDATE_OR_AUTHORIZATION = (
+        "mandate_or_authorization"
+    )
     UNKNOWN = "unknown"
 
 

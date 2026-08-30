@@ -9,12 +9,17 @@ from sqlalchemy import (
     Index,
     Integer,
     Numeric,
-    String
+    String,
 )
-from sqlalchemy.dialects.postgresql import UUID as PostgreSQLUUID
+from sqlalchemy.dialects.postgresql import (
+    UUID as PostgreSQLUUID,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.contracts.enums import FailureCategory, RecoveryCaseState
+from app.contracts.enums import (
+    FailureCategory,
+    RecoveryCaseState,
+)
 from app.db.base import Base
 
 
@@ -29,195 +34,231 @@ class RecoveryCase(Base):
         CheckConstraint(
             "provider_payment_id IS NOT NULL "
             "OR provider_subscription_id IS NOT NULL",
-            name="recovery_case_provider_reference_required"
+            name=(
+                "recovery_case_"
+                "provider_reference_required"
+            ),
         ),
-
         CheckConstraint(
             "original_amount_rupees >= 0",
-            name="recovery_case_original_amount_non_negative"
+            name=(
+                "recovery_case_"
+                "original_amount_non_negative"
+            ),
         ),
-
         CheckConstraint(
             "recoverable_amount_rupees >= 0",
-            name="recovery_case_recoverable_amount_non_negative"
+            name=(
+                "recovery_case_"
+                "recoverable_amount_non_negative"
+            ),
         ),
-
         CheckConstraint(
-            "recoverable_amount_rupees <= original_amount_rupees",
-            name="recovery_case_recoverable_within_original"
+            "recoverable_amount_rupees "
+            "<= original_amount_rupees",
+            name=(
+                "recovery_case_"
+                "recoverable_within_original"
+            ),
         ),
-
         CheckConstraint(
             "recovered_amount_rupees >= 0",
-            name="recovery_case_recovered_amount_non_negative"
+            name=(
+                "recovery_case_"
+                "recovered_amount_non_negative"
+            ),
         ),
-
         CheckConstraint(
-            "recovered_amount_rupees <= original_amount_rupees",
-            name="recovery_case_recovered_within_original"
+            "recovered_amount_rupees "
+            "<= original_amount_rupees",
+            name=(
+                "recovery_case_"
+                "recovered_within_original"
+            ),
         ),
-
         CheckConstraint(
             "intervention_cost_rupees >= 0",
-            name="recovery_case_intervention_cost_non_negative"
+            name=(
+                "recovery_case_"
+                "intervention_cost_non_negative"
+            ),
         ),
-
         Index(
             "recovery_case_state_next_action_index",
             "current_state",
-            "next_action_at"
-        )
+            "next_action_at",
+        ),
     )
 
-    # Unique ID of the Recovery Case
     id: Mapped[UUID] = mapped_column(
         PostgreSQLUUID(as_uuid=True),
         primary_key=True,
-        default=uuid4
+        default=uuid4,
     )
 
-    # Merchant/company that owns this Recovery Case
     tenant_id: Mapped[UUID] = mapped_column(
         PostgreSQLUUID(as_uuid=True),
         nullable=False,
-        index=True
+        index=True,
     )
 
-    # Razorpay payment ID
-    provider_payment_id: Mapped[str | None] = mapped_column(
+    # Original failed Razorpay payment.
+    provider_payment_id: Mapped[
+        str | None
+    ] = mapped_column(
         String(128),
         nullable=True,
-        index=True
+        index=True,
     )
 
-    # Razorpay subscription ID
-    provider_subscription_id: Mapped[str | None] = mapped_column(
+    # New captured Razorpay payment that recovered
+    # the failed amount. The original failed payment
+    # ID is never overwritten.
+    recovered_provider_payment_id: Mapped[
+        str | None
+    ] = mapped_column(
         String(128),
         nullable=True,
-        index=True
+        unique=True,
+        index=True,
     )
 
-    # Razorpay customer ID
-    provider_customer_id: Mapped[str | None] = mapped_column(
+    provider_subscription_id: Mapped[
+        str | None
+    ] = mapped_column(
         String(128),
-        nullable=True
+        nullable=True,
+        index=True,
     )
 
-    # Currency such as INR
+    provider_customer_id: Mapped[
+        str | None
+    ] = mapped_column(
+        String(128),
+        nullable=True,
+    )
+
     currency: Mapped[str] = mapped_column(
         String(3),
         nullable=False,
-        default="INR"
+        default="INR",
     )
 
-    # Original failed-payment amount
-    original_amount_rupees: Mapped[Decimal] = mapped_column(
-        Numeric(14, 2),
-        nullable=False
-    )
-
-    # Amount that can still be recovered
-    recoverable_amount_rupees: Mapped[Decimal] = mapped_column(
-        Numeric(14, 2),
-        nullable=False
-    )
-
-    # Amount successfully recovered
-    recovered_amount_rupees: Mapped[Decimal] = mapped_column(
+    original_amount_rupees: Mapped[
+        Decimal
+    ] = mapped_column(
         Numeric(14, 2),
         nullable=False,
-        default=Decimal("0.00")
     )
 
-    # Cost of reminders, discounts or interventions
-    intervention_cost_rupees: Mapped[Decimal] = mapped_column(
+    recoverable_amount_rupees: Mapped[
+        Decimal
+    ] = mapped_column(
         Numeric(14, 2),
         nullable=False,
-        default=Decimal("0.00")
     )
 
-    # Normalized reason why the payment failed
-    failure_category: Mapped[FailureCategory | None] = mapped_column(
+    recovered_amount_rupees: Mapped[
+        Decimal
+    ] = mapped_column(
+        Numeric(14, 2),
+        nullable=False,
+        default=Decimal("0.00"),
+    )
+
+    intervention_cost_rupees: Mapped[
+        Decimal
+    ] = mapped_column(
+        Numeric(14, 2),
+        nullable=False,
+        default=Decimal("0.00"),
+    )
+
+    failure_category: Mapped[
+        FailureCategory | None
+    ] = mapped_column(
         SqlEnum(
             FailureCategory,
             name="failure_category",
             values_callable=lambda enum_class: [
                 item.value for item in enum_class
-            ]
+            ],
         ),
-        nullable=True
+        nullable=True,
     )
 
-    # Current Recovery Case state
-    current_state: Mapped[RecoveryCaseState] = mapped_column(
+    current_state: Mapped[
+        RecoveryCaseState
+    ] = mapped_column(
         SqlEnum(
             RecoveryCaseState,
             name="recovery_case_state",
             values_callable=lambda enum_class: [
                 item.value for item in enum_class
-            ]
+            ],
         ),
         nullable=False,
         default=RecoveryCaseState.DETECTED,
-        index=True
+        index=True,
     )
 
-    # Protects the case from simultaneous conflicting updates
     state_version: Mapped[int] = mapped_column(
         Integer,
         nullable=False,
-        default=0
+        default=0,
     )
 
-    # Number of payment recovery attempts
     attempt_count: Mapped[int] = mapped_column(
         Integer,
         nullable=False,
-        default=0
+        default=0,
     )
 
-    # Number of customer communications
-    communication_count: Mapped[int] = mapped_column(
+    communication_count: Mapped[
+        int
+    ] = mapped_column(
         Integer,
         nullable=False,
-        default=0
+        default=0,
     )
 
-    # Time at which the next action should run
-    next_action_at: Mapped[datetime | None] = mapped_column(
+    next_action_at: Mapped[
+        datetime | None
+    ] = mapped_column(
         DateTime(timezone=True),
-        nullable=True
+        nullable=True,
     )
 
-    # Time after which recovery must stop
-    recovery_deadline_at: Mapped[datetime] = mapped_column(
+    recovery_deadline_at: Mapped[
+        datetime
+    ] = mapped_column(
         DateTime(timezone=True),
-        nullable=False
+        nullable=False,
     )
 
-    # Time at which payment was recovered
-    recovered_at: Mapped[datetime | None] = mapped_column(
+    recovered_at: Mapped[
+        datetime | None
+    ] = mapped_column(
         DateTime(timezone=True),
-        nullable=True
+        nullable=True,
     )
 
-    # Time at which the case was permanently closed
-    closed_at: Mapped[datetime | None] = mapped_column(
+    closed_at: Mapped[
+        datetime | None
+    ] = mapped_column(
         DateTime(timezone=True),
-        nullable=True
+        nullable=True,
     )
 
-    # Time at which the case was created
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
-        default=utc_now
+        default=utc_now,
     )
 
-    # Time at which the case was last updated
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
         default=utc_now,
-        onupdate=utc_now
+        onupdate=utc_now,
     )
