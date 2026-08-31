@@ -6,65 +6,71 @@ from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
-    model_validator
+    model_validator,
 )
 
 from app.contracts.enums import (
     FailureCategory,
-    RecoveryCaseState
+    RecoveryCaseState,
 )
 
 
 class RecoveryCaseCreate(BaseModel):
     model_config = ConfigDict(
-        extra="forbid"
+        extra="forbid",
     )
 
     tenant_id: UUID
 
     provider_payment_id: str | None = Field(
         default=None,
-        max_length=128
+        max_length=128,
     )
 
-    provider_subscription_id: str | None = Field(
+    provider_subscription_id: (
+        str | None
+    ) = Field(
         default=None,
-        max_length=128
+        max_length=128,
     )
 
     provider_customer_id: str | None = Field(
         default=None,
-        max_length=128
+        max_length=128,
     )
 
     currency: str = Field(
         default="INR",
         min_length=3,
-        max_length=3
+        max_length=3,
     )
 
     original_amount_rupees: Decimal = Field(
         gt=0,
         max_digits=14,
-        decimal_places=2
+        decimal_places=2,
     )
 
     recoverable_amount_rupees: Decimal = Field(
         gt=0,
         max_digits=14,
-        decimal_places=2
+        decimal_places=2,
     )
 
     recovery_deadline_at: datetime
 
     @model_validator(mode="after")
-    def validate_recovery_case(self):
+    def validate_recovery_case(
+        self,
+    ) -> "RecoveryCaseCreate":
         if (
             self.provider_payment_id is None
-            and self.provider_subscription_id is None
+            and self.provider_subscription_id
+            is None
         ):
             raise ValueError(
-                "Payment ID or subscription ID is required"
+                "Payment ID or subscription "
+                "ID is required"
             )
 
         if (
@@ -72,7 +78,8 @@ class RecoveryCaseCreate(BaseModel):
             > self.original_amount_rupees
         ):
             raise ValueError(
-                "Recoverable amount cannot exceed original amount"
+                "Recoverable amount cannot "
+                "exceed original amount"
             )
 
         return self
@@ -80,14 +87,26 @@ class RecoveryCaseCreate(BaseModel):
 
 class RecoveryCaseResponse(BaseModel):
     model_config = ConfigDict(
-        from_attributes=True
+        from_attributes=True,
     )
 
     id: UUID
     tenant_id: UUID
 
+    # Original Razorpay payment that failed
+    # and created the recovery case.
     provider_payment_id: str | None
-    provider_subscription_id: str | None
+
+    # New captured Razorpay payment that
+    # successfully recovered the revenue.
+    recovered_provider_payment_id: (
+        str | None
+    )
+
+    provider_subscription_id: (
+        str | None
+    )
+
     provider_customer_id: str | None
 
     currency: str
@@ -97,7 +116,10 @@ class RecoveryCaseResponse(BaseModel):
     recovered_amount_rupees: Decimal
     intervention_cost_rupees: Decimal
 
-    failure_category: FailureCategory | None
+    failure_category: (
+        FailureCategory | None
+    )
+
     current_state: RecoveryCaseState
 
     state_version: int

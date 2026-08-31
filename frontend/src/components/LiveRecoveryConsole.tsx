@@ -34,8 +34,10 @@ import {
   type RecoveryDecisionResponse,
 } from "../api/decisions";
 
+import { HumanReviewPanel } from "./HumanReviewPanel";
 import { TestCheckoutPanel } from "./TestCheckoutPanel";
 
+import "./HumanReviewPanel.css";
 import "./LiveRecoveryConsole.css";
 import "./TestCheckoutPanel.css";
 
@@ -651,6 +653,15 @@ export function LiveRecoveryConsole({
 
       {selectedCase && (
         <>
+          <HumanReviewPanel
+            caseId={selectedCase.id}
+            caseState={selectedCase.current_state}
+            caseStateVersion={
+              selectedCase.state_version
+            }
+            onResolved={handleRefresh}
+          />
+
           <section className="live-case-banner">
             <div>
               <span>Payment</span>
